@@ -15,13 +15,13 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities (planned)
 
-| Capability                        | Surface                          | Status                                 |
-| --------------------------------- | -------------------------------- | -------------------------------------- |
-| **Web search + fetch**            | Tools Provider                   | 🟢 core built (search + html→markdown) |
-| **Filesystem + code exec**        | Tools Provider                   | ⏳ planned                             |
-| **RAG / memory**                  | Prompt Preprocessor + embeddings | ⏳ planned                             |
-| **Structured output + reasoning** | Generator / preprocessor         | ⏳ planned                             |
-| **Standalone agent CLI**          | SDK app (`.act()`)               | ⏳ planned                             |
+| Capability                        | Surface                          | Status                               |
+| --------------------------------- | -------------------------------- | ------------------------------------ |
+| **Web search + fetch**            | Tools Provider                   | ✅ built — `web-tools` plugin + core |
+| **Filesystem + code exec**        | Tools Provider                   | ⏳ planned                           |
+| **RAG / memory**                  | Prompt Preprocessor + embeddings | ⏳ planned                           |
+| **Structured output + reasoning** | Generator / preprocessor         | ⏳ planned                           |
+| **Standalone agent CLI**          | SDK app (`.act()`)               | ⏳ planned                           |
 
 ### Web search backends
 
@@ -37,15 +37,27 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 ```
 lmstudio-suite/
 ├── packages/
-│   └── core/                 @lmstudio-suite/core — shared capability library
-│       └── src/
-│           ├── client.ts     LMStudioClient helpers (standalone apps)
-│           ├── web/          search + fetch + html→markdown  ✅
-│           ├── fs/           scoped filesystem ops            (planned)
-│           ├── exec/         sandboxed shell / JS exec        (planned)
-│           ├── rag/          embeddings + vector store        (planned)
-│           └── reasoning/    structured output + retry/CoT    (planned)
-└── (plugin packages + agent CLI added per capability)
+│   ├── core/                 @lmstudio-suite/core — shared capability library
+│   │   └── src/
+│   │       ├── client.ts     LMStudioClient helpers (standalone apps)
+│   │       ├── web/          search + fetch + html→markdown  ✅
+│   │       ├── fs/           scoped filesystem ops            (planned)
+│   │       ├── exec/         sandboxed shell / JS exec        (planned)
+│   │       ├── rag/          embeddings + vector store        (planned)
+│   │       └── reasoning/    structured output + retry/CoT    (planned)
+│   └── plugin-web/           ✅ Tools Provider plugin (web_search + fetch_url)
+│       ├── manifest.json     name/owner/type:plugin/runner:node
+│       └── src/{index,config,tools}.ts
+└── (more plugins + agent CLI added per capability)
+```
+
+### Run the `web-tools` plugin in LM Studio
+
+```bash
+cd packages/plugin-web
+lms dev          # build + hot-reload into the running LM Studio app
+# then enable "web-tools" in a chat; pick a model that supports tool use and
+# the model can call web_search / fetch_url. Configure provider/keys in settings.
 ```
 
 Each in-app plugin ships as its own package (manifest.json + package-lock.json) so it can be published independently with `lms push`; plugins import `@lmstudio-suite/core` and are bundled at build time.
