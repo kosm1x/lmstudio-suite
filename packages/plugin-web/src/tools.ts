@@ -17,5 +17,6 @@ export async function toolsProvider(
     },
     maxResults: chat.get("maxResults"),
     fetchMaxChars: chat.get("fetchMaxChars"),
+    allowPrivateHosts: global.get("allowPrivateHosts"),
   });
 }

@@ -43,6 +43,17 @@ export const globalConfigSchematics = createConfigSchematics()
     },
     "",
   )
+  .field(
+    "allowPrivateHosts",
+    "boolean",
+    {
+      displayName: "Allow fetching private/localhost hosts",
+      hint: "Off by default to block SSRF (localhost, internal services, cloud metadata). Enable only to let the model read your own local services.",
+      warning:
+        "Enabling this lets the model fetch loopback/internal URLs, including across redirects.",
+    },
+    false,
+  )
   .build();
 
 export const chatConfigSchematics = createConfigSchematics()

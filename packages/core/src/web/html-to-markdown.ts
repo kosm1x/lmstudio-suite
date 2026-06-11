@@ -85,6 +85,15 @@ function renderChildren(el: HTMLElement): string {
   return el.childNodes.map(render).join("");
 }
 
+/**
+ * node-html-parser keeps <pre>/<code> content as a single raw text node that
+ * may contain literal child tags (e.g. <pre><code>…</code></pre>). Re-parse such
+ * raw text to strip the tags while preserving newlines; plain text is untouched.
+ */
+function stripTags(raw: string): string {
+  return /<\/?[a-zA-Z]/.test(raw) ? parse(raw).structuredText : raw;
+}
+
 function render(node: Node): string {
   if (isText(node)) return decodeEntities(node.rawText).replace(/\s+/g, " ");
   if (!isElement(node)) return "";
@@ -117,11 +126,12 @@ function render(node: Node): string {
       return inner ? `*${inner}*` : "";
     }
     case "code": {
-      const inner = decodeEntities(node.text).trim();
+      const inner = decodeEntities(stripTags(node.text)).trim();
       return inner ? `\`${inner}\`` : "";
     }
     case "pre": {
-      const inner = decodeEntities(node.text).replace(/\n+$/, "");
+      // Strip any nested <code> tags (the most common pattern) from the fence.
+      const inner = decodeEntities(stripTags(node.text)).replace(/\n+$/, "");
       return `\n\n\`\`\`\n${inner}\n\`\`\`\n\n`;
     }
     case "a": {

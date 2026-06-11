@@ -16,7 +16,9 @@ export function cosineSimilarity(a: number[], b: number[]): number {
     normB += y * y;
   }
   const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
+  if (!Number.isFinite(denom) || denom === 0) return 0; // zero or NaN/Inf inputs
+  const score = dot / denom;
+  return Number.isFinite(score) ? score : 0;
 }
 
 export interface VectorEntry {
@@ -55,12 +57,17 @@ export class VectorStore {
     this.entries = [];
   }
 
-  /** Return the top-K entries by cosine similarity, filtered by `minScore`. */
+  /**
+   * Return the top-K entries by cosine similarity, filtered by `minScore`.
+   * Entries whose vector dimension differs from the query (e.g. left over from a
+   * different embedding model) are skipped rather than throwing.
+   */
   query(vector: number[], topK = 5, minScore = -Infinity): ScoredEntry[] {
-    const scored = this.entries.map((entry) => ({
-      entry,
-      score: cosineSimilarity(vector, entry.vector),
-    }));
+    const scored: ScoredEntry[] = [];
+    for (const entry of this.entries) {
+      if (entry.vector.length !== vector.length) continue;
+      scored.push({ entry, score: cosineSimilarity(vector, entry.vector) });
+    }
     scored.sort((a, b) => b.score - a.score);
     return scored
       .filter((s) => s.score >= minScore)

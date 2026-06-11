@@ -32,8 +32,11 @@ async function run(): Promise<void> {
     searxngUrl: process.env["SEARXNG_URL"],
   };
 
+  const allowPrivateHosts = /^(1|true|yes)$/i.test(
+    process.env["ALLOW_PRIVATE_HOSTS"] ?? "",
+  );
   const tools: Tool[] = [
-    ...createWebTools({ search }),
+    ...createWebTools({ search, allowPrivateHosts }),
     ...createFsTools({ root: args.cwd }),
   ];
   if (args.shell) tools.push(createShellTool({ cwd: args.cwd }));

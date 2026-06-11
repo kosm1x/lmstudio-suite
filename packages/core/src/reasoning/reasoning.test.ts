@@ -23,6 +23,16 @@ describe("extractJson", () => {
   it("throws when there is no JSON", () => {
     expect(() => extractJson("no json here")).toThrow(/No JSON/);
   });
+
+  it("prefers the real payload over an incidental bracket in prose (regression)", () => {
+    expect(extractJson('See item [1] below: {"a": 1}')).toEqual({ a: 1 });
+  });
+
+  it("falls past a non-JSON code fence to the real json fence (regression)", () => {
+    const text =
+      '```\nfetchPage(url)\n```\n\n```json\n{"provider":"brave"}\n```';
+    expect(extractJson(text)).toEqual({ provider: "brave" });
+  });
 });
 
 describe("generateStructured", () => {

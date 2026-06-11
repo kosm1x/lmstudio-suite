@@ -48,7 +48,12 @@ export async function generateStructured<T>(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const result = await model.respond(currentPrompt, { structured: schema });
-      const candidate = result.parsed ?? extractJson(result.content);
+      // Treat an explicit `parsed: null` as a real value (e.g. z.null()); only
+      // fall back to text extraction when the SDK produced no parsed value.
+      const candidate =
+        result.parsed !== undefined
+          ? result.parsed
+          : extractJson(result.content);
       return schema.parse(candidate);
     } catch (err) {
       lastError = err;

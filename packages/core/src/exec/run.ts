@@ -8,6 +8,7 @@
  * enable it where you trust the model + prompt.
  */
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 
 export interface RunOptions {
   /** Working directory for the process. */
@@ -102,15 +103,25 @@ function runProcess(
     let timedOut = false;
     let settled = false;
 
-    const append = (current: string, chunk: Buffer): string => {
+    // Decode through a StringDecoder per stream so a multi-byte UTF-8 character
+    // split across two chunks is not corrupted into replacement characters.
+    const outDecoder = new StringDecoder("utf8");
+    const errDecoder = new StringDecoder("utf8");
+    const append = (current: string, text: string): string => {
       if (current.length >= maxOutputBytes) {
         truncated = true;
         return current;
       }
-      return current + chunk.toString("utf-8");
+      return current + text;
     };
-    child.stdout.on("data", (c: Buffer) => (stdout = append(stdout, c)));
-    child.stderr.on("data", (c: Buffer) => (stderr = append(stderr, c)));
+    child.stdout.on(
+      "data",
+      (c: Buffer) => (stdout = append(stdout, outDecoder.write(c))),
+    );
+    child.stderr.on(
+      "data",
+      (c: Buffer) => (stderr = append(stderr, errDecoder.write(c))),
+    );
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -143,8 +154,8 @@ function runProcess(
 
     child.on("error", (err) =>
       finish({
-        stdout: clamp(stdout),
-        stderr: clamp(stderr + `\n${String(err)}`),
+        stdout: clamp(stdout + outDecoder.end()),
+        stderr: clamp(stderr + errDecoder.end() + `\n${String(err)}`),
         exitCode: null,
         signal: null,
         timedOut,
@@ -153,8 +164,8 @@ function runProcess(
     );
     child.on("close", (code, sig) =>
       finish({
-        stdout: clamp(stdout),
-        stderr: clamp(stderr),
+        stdout: clamp(stdout + outDecoder.end()),
+        stderr: clamp(stderr + errDecoder.end()),
         exitCode: code,
         signal: sig,
         timedOut,

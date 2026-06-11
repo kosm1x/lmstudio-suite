@@ -34,6 +34,13 @@ describe("runShell", () => {
   });
 });
 
+describe("runShell utf-8", () => {
+  it("does not corrupt multi-byte characters (regression)", async () => {
+    const r = await runShell("printf 'héllo 你好 🚀'");
+    expect(r.stdout).toBe("héllo 你好 🚀");
+  });
+});
+
 describe("runNode", () => {
   it("runs an ES-module snippet and captures console output", async () => {
     const r = await runNode("console.log(1 + 1)");

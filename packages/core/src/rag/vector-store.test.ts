@@ -16,6 +16,11 @@ describe("cosineSimilarity", () => {
     expect(cosineSimilarity([0, 0], [1, 1])).toBe(0);
   });
 
+  it("returns 0 (not NaN) for non-finite inputs (regression)", () => {
+    expect(cosineSimilarity([NaN, 1], [1, 1])).toBe(0);
+    expect(cosineSimilarity([Infinity, 1], [1, 1])).toBe(0);
+  });
+
   it("throws on length mismatch", () => {
     expect(() => cosineSimilarity([1], [1, 2])).toThrow(/length mismatch/);
   });
@@ -37,6 +42,14 @@ describe("VectorStore.query", () => {
   it("filters by minScore", () => {
     const filtered = store.query([0, 1, 0], 5, 0.5);
     expect(filtered.map((s) => s.entry.id)).toEqual(["b"]);
+  });
+
+  it("skips dimension-mismatched entries instead of throwing (regression)", () => {
+    const s = new VectorStore();
+    s.add({ id: "ok", vector: [1, 0, 0], text: "a" });
+    s.add({ id: "bad", vector: [1, 0], text: "b" }); // wrong dimension
+    const result = s.query([1, 0, 0], 5);
+    expect(result.map((r) => r.entry.id)).toEqual(["ok"]);
   });
 });
 

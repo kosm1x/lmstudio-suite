@@ -36,4 +36,12 @@ describe("isPrivateHost", () => {
       expect(isPrivateHost(h)).toBe(false);
     }
   });
+
+  it("flags IPv6 loopback/link-local/unique-local and 0.0.0.0 (regression)", () => {
+    // IPv6 arrives bracketed from URL.hostname
+    expect(isPrivateHost(new URL("http://[::1]/").hostname)).toBe(true);
+    for (const h of ["0.0.0.0", "fe80::1", "fc00::1", "fd12::3"]) {
+      expect(isPrivateHost(h)).toBe(true);
+    }
+  });
 });

@@ -49,6 +49,16 @@ describe("htmlToMarkdown", () => {
     const md = htmlToMarkdown(`<p>a</p><p>b</p>`);
     expect(md).not.toMatch(/\n{3,}/);
   });
+
+  it("does not leak nested <code> tags inside a <pre> fence (regression)", () => {
+    const md = htmlToMarkdown(
+      `<pre><code class="lang-js">const a = 1;\nconst b = 2;</code></pre>`,
+    );
+    expect(md).not.toContain("<code");
+    expect(md).not.toContain("</code>");
+    expect(md).toContain("const a = 1;");
+    expect(md).toContain("const b = 2;");
+  });
 });
 
 describe("extractTitle", () => {

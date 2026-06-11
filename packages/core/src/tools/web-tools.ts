@@ -12,11 +12,17 @@ export interface WebToolsOptions {
   maxResults?: number;
   /** Max characters fetch_url returns per page (default 8000). */
   fetchMaxChars?: number;
+  /**
+   * Allow fetch_url to reach loopback/private/link-local hosts. Default false
+   * (blocks SSRF to localhost, internal services, and cloud metadata).
+   */
+  allowPrivateHosts?: boolean;
 }
 
 export function createWebTools(options: WebToolsOptions): Tool[] {
   const maxResults = options.maxResults ?? 5;
   const fetchMaxChars = options.fetchMaxChars ?? 8000;
+  const allowPrivateHosts = options.allowPrivateHosts ?? false;
 
   const webSearchTool = tool({
     name: "web_search",
@@ -61,7 +67,11 @@ export function createWebTools(options: WebToolsOptions): Tool[] {
     implementation: async ({ url }, { status, warn, signal }) => {
       status(`Fetching ${url}`);
       try {
-        const page = await fetchPage(url, { maxChars: fetchMaxChars, signal });
+        const page = await fetchPage(url, {
+          maxChars: fetchMaxChars,
+          signal,
+          allowPrivateHosts,
+        });
         return `# ${page.title}\n<${page.finalUrl}>\n\n${page.markdown}`;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
