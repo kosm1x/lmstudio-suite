@@ -23,7 +23,7 @@
  */
 import * as esbuild from "esbuild";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -114,6 +114,11 @@ for (const plugin of PLUGINS) {
     ) + "\n",
   );
   await writeFile(join(outDir, ".gitignore"), "node_modules/\n");
+
+  // Copy the plugin's README into the artifact (shown on its LM Studio Hub page).
+  await copyFile(join(pkgDir, "README.md"), join(outDir, "README.md")).catch(() => {
+    console.warn(`  (no README.md for ${plugin})`);
+  });
 
   if (writeLock) {
     execFileSync("npm", ["install", "--package-lock-only", "--no-audit", "--no-fund"], {
