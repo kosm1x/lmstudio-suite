@@ -15,13 +15,13 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities (planned)
 
-| Capability                        | Surface                          | Status                               |
-| --------------------------------- | -------------------------------- | ------------------------------------ |
-| **Web search + fetch**            | Tools Provider                   | ✅ built — `web-tools` plugin + core |
-| **Filesystem + code exec**        | Tools Provider                   | ⏳ planned                           |
-| **RAG / memory**                  | Prompt Preprocessor + embeddings | ⏳ planned                           |
-| **Structured output + reasoning** | Generator / preprocessor         | ⏳ planned                           |
-| **Standalone agent CLI**          | SDK app (`.act()`)               | ⏳ planned                           |
+| Capability                        | Surface                          | Status                                 |
+| --------------------------------- | -------------------------------- | -------------------------------------- |
+| **Web search + fetch**            | Tools Provider                   | ✅ built — `web-tools` plugin + core   |
+| **Filesystem + code exec**        | Tools Provider                   | ✅ built — `local-tools` plugin + core |
+| **RAG / memory**                  | Prompt Preprocessor + embeddings | ⏳ planned                             |
+| **Structured output + reasoning** | Generator / preprocessor         | ⏳ planned                             |
+| **Standalone agent CLI**          | SDK app (`.act()`)               | ⏳ planned                             |
 
 ### Web search backends
 
@@ -40,14 +40,13 @@ lmstudio-suite/
 │   ├── core/                 @lmstudio-suite/core — shared capability library
 │   │   └── src/
 │   │       ├── client.ts     LMStudioClient helpers (standalone apps)
-│   │       ├── web/          search + fetch + html→markdown  ✅
-│   │       ├── fs/           scoped filesystem ops            (planned)
-│   │       ├── exec/         sandboxed shell / JS exec        (planned)
-│   │       ├── rag/          embeddings + vector store        (planned)
-│   │       └── reasoning/    structured output + retry/CoT    (planned)
-│   └── plugin-web/           ✅ Tools Provider plugin (web_search + fetch_url)
-│       ├── manifest.json     name/owner/type:plugin/runner:node
-│       └── src/{index,config,tools}.ts
+│   │       ├── web/          search + fetch + html→markdown      ✅
+│   │       ├── fs/           ScopedFs (path-guarded file ops)    ✅
+│   │       ├── exec/         runShell / runNode (timeout + caps) ✅
+│   │       ├── rag/          embeddings + vector store           (planned)
+│   │       └── reasoning/    structured output + retry/CoT       (planned)
+│   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url)
+│   └── plugin-local/         ✅ Tools Provider (read/write/list_dir + opt-in run_shell)
 └── (more plugins + agent CLI added per capability)
 ```
 

@@ -7,3 +7,5 @@
  */
 export * from "./client";
 export * from "./web/index";
+export * from "./fs/index";
+export * from "./exec/index";

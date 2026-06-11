@@ -1,0 +1,48 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ToolsProviderController } from "@lmstudio/sdk";
+import { toolsProvider } from "./tools";
+
+let dir: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), "local-tools-"));
+});
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
+
+function fakeController(enableShell: boolean): ToolsProviderController {
+  const cfg = (v: Record<string, unknown>) => ({ get: (k: string) => v[k] });
+  return {
+    getPluginConfig: () => cfg({ enableShell, commandTimeoutMs: 30_000 }),
+    getWorkingDirectory: () => dir,
+    abortSignal: new AbortController().signal,
+  } as unknown as ToolsProviderController;
+}
+
+const names = (tools: Array<{ name: string }>) =>
+  tools.map((t) => t.name).sort();
+
+describe("local-tools toolsProvider", () => {
+  it("exposes only filesystem tools when shell is disabled", async () => {
+    const tools = (await toolsProvider(fakeController(false))) as Array<{
+      name: string;
+    }>;
+    expect(names(tools)).toEqual(["list_dir", "read_file", "write_file"]);
+  });
+
+  it("adds run_shell when shell is enabled", async () => {
+    const tools = (await toolsProvider(fakeController(true))) as Array<{
+      name: string;
+    }>;
+    expect(names(tools)).toEqual([
+      "list_dir",
+      "read_file",
+      "run_shell",
+      "write_file",
+    ]);
+  });
+});
