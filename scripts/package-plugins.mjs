@@ -82,7 +82,10 @@ for (const plugin of PLUGINS) {
       {
         name: `lms-plugin-${manifest.name}`,
         version: "0.1.0",
-        type: "module",
+        // No "type": "module" — LM Studio bundles to a CommonJS .lmstudio/production.js
+        // (it emits require() for external deps). Declaring ESM here makes Node load
+        // that CJS output as an ES module and crash with "require is not defined".
+        // The official plugins omit the type field for the same reason.
         main: "src/index.ts",
         scripts: { dev: "lms dev", push: "lms push" },
         dependencies: DEPS,

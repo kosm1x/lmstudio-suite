@@ -1,7 +1,6 @@
 {
   "name": "lms-plugin-web-tools",
   "version": "0.1.0",
-  "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "dev": "lms dev",
