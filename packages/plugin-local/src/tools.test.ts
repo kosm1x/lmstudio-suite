@@ -45,4 +45,23 @@ describe("local-tools toolsProvider", () => {
       "write_file",
     ]);
   });
+
+  it("still loads tools when no working directory is attached (regression)", async () => {
+    const cfg = (v: Record<string, unknown>) => ({ get: (k: string) => v[k] });
+    const noWdController = {
+      getPluginConfig: () =>
+        cfg({ enableShell: false, commandTimeoutMs: 30_000 }),
+      getWorkingDirectory: () => {
+        throw new Error(
+          "This prediction process is not attached to a working directory.",
+        );
+      },
+      abortSignal: new AbortController().signal,
+    } as unknown as ToolsProviderController;
+
+    const tools = (await toolsProvider(noWdController)) as Array<{
+      name: string;
+    }>;
+    expect(names(tools)).toEqual(["list_dir", "read_file", "write_file"]);
+  });
 });

@@ -26,6 +26,9 @@ var chatConfigSchematics = createConfigSchematics().field(
 
 // packages/plugin-local/src/tools.ts
 import "@lmstudio/sdk";
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // packages/core/src/client.ts
 import { LMStudioClient } from "@lmstudio/sdk";
@@ -303,9 +306,19 @@ ${r.stderr}`);
 }
 
 // packages/plugin-local/src/tools.ts
+async function resolveRoot(ctl) {
+  try {
+    return ctl.getWorkingDirectory();
+  } catch {
+    const fallback = join(tmpdir(), "lmstudio-local-tools");
+    await mkdir(fallback, { recursive: true }).catch(() => {
+    });
+    return fallback;
+  }
+}
 async function toolsProvider(ctl) {
   const chat = ctl.getPluginConfig(chatConfigSchematics);
-  const root = ctl.getWorkingDirectory();
+  const root = await resolveRoot(ctl);
   const tools = createFsTools({ root });
   if (chat.get("enableShell")) {
     tools.push(

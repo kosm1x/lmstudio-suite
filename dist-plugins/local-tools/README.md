@@ -13,6 +13,10 @@ Part of [lmstudio-suite](https://github.com/kosm1x/lmstudio-suite).
 | `list_dir`   | List files and subdirectories.                                                         |
 | `run_shell`  | Run a shell command and return exit code + stdout/stderr. **Opt-in** (off by default). |
 
+## Working directory
+
+The tools operate on the **folder attached to the chat**. If the chat has no folder attached, they fall back to a temp sandbox (`<tmp>/lmstudio-local-tools`) so they still work — attach a folder to the chat to read/write your real files there.
+
 ## Configuration (per-chat)
 
 - **Enable run_shell** — off by default. When on, the model can run shell commands in the working directory.
