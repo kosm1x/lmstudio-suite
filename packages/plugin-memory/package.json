@@ -1,0 +1,12 @@
+{
+  "name": "@lmstudio-suite/plugin-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio Prompt Preprocessor plugin: RAG over a local knowledge directory using LM Studio embeddings.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}

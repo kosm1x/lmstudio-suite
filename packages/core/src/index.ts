@@ -9,3 +9,4 @@ export * from "./client";
 export * from "./web/index";
 export * from "./fs/index";
 export * from "./exec/index";
+export * from "./rag/index";

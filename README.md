@@ -19,7 +19,7 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 | --------------------------------- | -------------------------------- | -------------------------------------- |
 | **Web search + fetch**            | Tools Provider                   | ✅ built — `web-tools` plugin + core   |
 | **Filesystem + code exec**        | Tools Provider                   | ✅ built — `local-tools` plugin + core |
-| **RAG / memory**                  | Prompt Preprocessor + embeddings | ⏳ planned                             |
+| **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ built — `memory` plugin + core      |
 | **Structured output + reasoning** | Generator / preprocessor         | ⏳ planned                             |
 | **Standalone agent CLI**          | SDK app (`.act()`)               | ⏳ planned                             |
 
@@ -43,11 +43,12 @@ lmstudio-suite/
 │   │       ├── web/          search + fetch + html→markdown      ✅
 │   │       ├── fs/           ScopedFs (path-guarded file ops)    ✅
 │   │       ├── exec/         runShell / runNode (timeout + caps) ✅
-│   │       ├── rag/          embeddings + vector store           (planned)
+│   │       ├── rag/          chunk + cosine VectorStore + index  ✅
 │   │       └── reasoning/    structured output + retry/CoT       (planned)
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url)
-│   └── plugin-local/         ✅ Tools Provider (read/write/list_dir + opt-in run_shell)
-└── (more plugins + agent CLI added per capability)
+│   ├── plugin-local/         ✅ Tools Provider (read/write/list_dir + opt-in run_shell)
+│   └── plugin-memory/        ✅ Prompt Preprocessor (RAG over a knowledge dir)
+└── (reasoning plugin + agent CLI added per capability)
 ```
 
 ### Run the `web-tools` plugin in LM Studio

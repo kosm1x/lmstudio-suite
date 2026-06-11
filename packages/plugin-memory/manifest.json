@@ -1,0 +1,8 @@
+{
+  "name": "memory",
+  "owner": "kosm1x",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": ["rag", "memory", "retrieval", "prompt-preprocessor"]
+}
