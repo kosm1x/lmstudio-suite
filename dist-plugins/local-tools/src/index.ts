@@ -3,6 +3,15 @@
 // packages/plugin-local/src/config.ts
 import { createConfigSchematics } from "@lmstudio/sdk";
 var chatConfigSchematics = createConfigSchematics().field(
+  "workingDir",
+  "string",
+  {
+    displayName: "Working directory",
+    hint: "Absolute path the file/shell tools operate in (e.g. your project folder). Supports a leading ~. Leave blank to use the chat's auto working directory, falling back to a temp sandbox.",
+    placeholder: "~/projects/my-app"
+  },
+  ""
+).field(
   "enableShell",
   "boolean",
   {
@@ -27,8 +36,8 @@ var chatConfigSchematics = createConfigSchematics().field(
 // packages/plugin-local/src/tools.ts
 import "@lmstudio/sdk";
 import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve as resolve2 } from "node:path";
 
 // packages/core/src/client.ts
 import { LMStudioClient } from "@lmstudio/sdk";
@@ -306,7 +315,12 @@ ${r.stderr}`);
 }
 
 // packages/plugin-local/src/tools.ts
-async function resolveRoot(ctl) {
+async function resolveRoot(ctl, configuredDir) {
+  const dir = (configuredDir ?? "").trim();
+  if (dir) {
+    const expanded = dir === "~" || dir.startsWith("~/") ? join(homedir(), dir.slice(1)) : dir;
+    return resolve2(expanded);
+  }
   try {
     return ctl.getWorkingDirectory();
   } catch {
@@ -318,7 +332,7 @@ async function resolveRoot(ctl) {
 }
 async function toolsProvider(ctl) {
   const chat = ctl.getPluginConfig(chatConfigSchematics);
-  const root = await resolveRoot(ctl);
+  const root = await resolveRoot(ctl, chat.get("workingDir"));
   const tools = createFsTools({ root });
   if (chat.get("enableShell")) {
     tools.push(

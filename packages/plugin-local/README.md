@@ -15,7 +15,9 @@ Part of [lmstudio-suite](https://github.com/kosm1x/lmstudio-suite).
 
 ## Working directory
 
-The tools operate on the **folder attached to the chat**. If the chat has no folder attached, they fall back to a temp sandbox (`<tmp>/lmstudio-local-tools`) so they still work — attach a folder to the chat to read/write your real files there.
+Set **Working directory** in the plugin config to the folder you want the tools to operate in — e.g. `~/projects/my-app` (a leading `~` is expanded). All paths are then relative to it, and `..` escapes are rejected. This is how you point the tools at your real project.
+
+If left blank, it uses LM Studio's auto per-chat working directory, falling back to a temp sandbox (`<tmp>/lmstudio-local-tools`) — so the tools always load, but won't see your project until you set the directory.
 
 ## Configuration (per-chat)
 

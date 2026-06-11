@@ -3,6 +3,16 @@ import { createConfigSchematics } from "@lmstudio/sdk";
 
 export const chatConfigSchematics = createConfigSchematics()
   .field(
+    "workingDir",
+    "string",
+    {
+      displayName: "Working directory",
+      hint: "Absolute path the file/shell tools operate in (e.g. your project folder). Supports a leading ~. Leave blank to use the chat's auto working directory, falling back to a temp sandbox.",
+      placeholder: "~/projects/my-app",
+    },
+    "",
+  )
+  .field(
     "enableShell",
     "boolean",
     {

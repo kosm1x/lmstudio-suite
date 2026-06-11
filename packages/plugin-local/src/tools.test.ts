@@ -17,7 +17,8 @@ afterEach(async () => {
 function fakeController(enableShell: boolean): ToolsProviderController {
   const cfg = (v: Record<string, unknown>) => ({ get: (k: string) => v[k] });
   return {
-    getPluginConfig: () => cfg({ enableShell, commandTimeoutMs: 30_000 }),
+    getPluginConfig: () =>
+      cfg({ enableShell, commandTimeoutMs: 30_000, workingDir: "" }),
     getWorkingDirectory: () => dir,
     abortSignal: new AbortController().signal,
   } as unknown as ToolsProviderController;
@@ -50,7 +51,7 @@ describe("local-tools toolsProvider", () => {
     const cfg = (v: Record<string, unknown>) => ({ get: (k: string) => v[k] });
     const noWdController = {
       getPluginConfig: () =>
-        cfg({ enableShell: false, commandTimeoutMs: 30_000 }),
+        cfg({ enableShell: false, commandTimeoutMs: 30_000, workingDir: "" }),
       getWorkingDirectory: () => {
         throw new Error(
           "This prediction process is not attached to a working directory.",
@@ -62,6 +63,21 @@ describe("local-tools toolsProvider", () => {
     const tools = (await toolsProvider(noWdController)) as Array<{
       name: string;
     }>;
+    expect(names(tools)).toEqual(["list_dir", "read_file", "write_file"]);
+  });
+
+  it("scopes tools to a configured workingDir without needing an attached folder", async () => {
+    const cfg = (v: Record<string, unknown>) => ({ get: (k: string) => v[k] });
+    const controller = {
+      getPluginConfig: () =>
+        cfg({ enableShell: false, commandTimeoutMs: 30_000, workingDir: dir }),
+      getWorkingDirectory: () => {
+        throw new Error("not attached"); // configured dir should win, so this is never hit
+      },
+      abortSignal: new AbortController().signal,
+    } as unknown as ToolsProviderController;
+
+    const tools = (await toolsProvider(controller)) as Array<{ name: string }>;
     expect(names(tools)).toEqual(["list_dir", "read_file", "write_file"]);
   });
 });
