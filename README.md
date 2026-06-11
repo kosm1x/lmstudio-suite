@@ -67,7 +67,23 @@ lms dev          # build + hot-reload into the running LM Studio app
 # the model can call web_search / fetch_url. Configure provider/keys in settings.
 ```
 
-Each in-app plugin ships as its own package (manifest.json + package-lock.json) so it can be published independently with `lms push`; plugins import `@lmstudio-suite/core` and are bundled at build time.
+### Package the plugins for `lms push`
+
+The plugins import the shared workspace package `@lmstudio-suite/core`, which is **not published to npm** — so a plugin folder can't be pushed as-is. `npm run package:plugins` produces self-contained, push-ready directories under `dist-plugins/`, one per plugin:
+
+```bash
+npm run package:plugins -- --owner <your-lms-hub-handle>
+# → dist-plugins/{web-tools,local-tools,memory,reasoning}/
+#   each: manifest.json · package.json (lms-plugin-<name>) · package-lock.json ·
+#         tsconfig.json · src/index.ts  (self-contained bundle)
+
+cd dist-plugins/web-tools
+lms push        # publishes to the LM Studio Hub (run `lms login` first)
+```
+
+How it works: each plugin's entry is esbuild-bundled with `@lmstudio-suite/core` **inlined** (tree-shaken to only what that plugin uses; the HTML parser is inlined into `web-tools`), while `@lmstudio/sdk` and `zod` stay **external** — both are provided by the plugin runtime, and zod must be the _same instance_ the SDK uses for `tool()` schema extraction (hence the v3 pin). The generated `package-lock.json` resolves `zod@3.x` + `@lmstudio/sdk@1.5.0`. `dist-plugins/` is git-ignored — regenerate it whenever `core` or a plugin changes.
+
+> Set `--owner` to your real LM Studio Hub handle (the committed manifests use `kosm1x` as a placeholder). For local iteration without publishing, `lms dev` from a `packages/plugin-*` folder works directly against the monorepo.
 
 ### Run the standalone agent CLI
 
