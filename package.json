@@ -1,0 +1,25 @@
+{
+  "name": "lmstudio-suite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A TypeScript suite of integrations (LM Studio plugins + SDK apps) that make local models more usable and skillful.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

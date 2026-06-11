@@ -1,0 +1,20 @@
+{
+  "name": "@lmstudio-suite/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared capability library for the LM Studio suite: web search/fetch, scoped filesystem, sandboxed exec, RAG, and reasoning helpers. Consumed by both in-app plugins and standalone SDK apps.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./web": "./src/web/index.ts",
+    "./fs": "./src/fs/index.ts",
+    "./exec": "./src/exec/index.ts",
+    "./rag": "./src/rag/index.ts",
+    "./reasoning": "./src/reasoning/index.ts"
+  },
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
+    "node-html-parser": "^7.1.0",
+    "zod": "^3.25.76"
+  }
+}
