@@ -1,0 +1,8 @@
+{
+  "name": "reasoning",
+  "owner": "kosm1x",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": ["reasoning", "chain-of-thought", "prompt-preprocessor"]
+}

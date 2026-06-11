@@ -1,0 +1,14 @@
+{
+  "name": "@lmstudio-suite/agent-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone local agent: drives an LM Studio model via .act() with the suite's web, filesystem, and shell tools.",
+  "scripts": {
+    "start": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}

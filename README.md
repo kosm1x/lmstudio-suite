@@ -20,8 +20,8 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 | **Web search + fetch**            | Tools Provider                   | ✅ built — `web-tools` plugin + core   |
 | **Filesystem + code exec**        | Tools Provider                   | ✅ built — `local-tools` plugin + core |
 | **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ built — `memory` plugin + core      |
-| **Structured output + reasoning** | Generator / preprocessor         | ⏳ planned                             |
-| **Standalone agent CLI**          | SDK app (`.act()`)               | ⏳ planned                             |
+| **Structured output + reasoning** | Preprocessor + core helpers      | ✅ built — `reasoning` plugin + core   |
+| **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                 |
 
 ### Web search backends
 
@@ -40,16 +40,23 @@ lmstudio-suite/
 │   ├── core/                 @lmstudio-suite/core — shared capability library
 │   │   └── src/
 │   │       ├── client.ts     LMStudioClient helpers (standalone apps)
-│   │       ├── web/          search + fetch + html→markdown      ✅
-│   │       ├── fs/           ScopedFs (path-guarded file ops)    ✅
-│   │       ├── exec/         runShell / runNode (timeout + caps) ✅
-│   │       ├── rag/          chunk + cosine VectorStore + index  ✅
-│   │       └── reasoning/    structured output + retry/CoT       (planned)
+│   │       ├── web/          search + fetch + html→markdown        ✅
+│   │       ├── fs/           ScopedFs (path-guarded file ops)      ✅
+│   │       ├── exec/         runShell / runNode (timeout + caps)   ✅
+│   │       ├── rag/          chunk + cosine VectorStore + index    ✅
+│   │       ├── reasoning/    extractJson + generateStructured + CoT ✅
+│   │       └── tools/        shared SDK tool() builders (web/fs/shell) ✅
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url)
 │   ├── plugin-local/         ✅ Tools Provider (read/write/list_dir + opt-in run_shell)
-│   └── plugin-memory/        ✅ Prompt Preprocessor (RAG over a knowledge dir)
-└── (reasoning plugin + agent CLI added per capability)
+│   ├── plugin-memory/        ✅ Prompt Preprocessor (RAG over a knowledge dir)
+│   ├── plugin-reasoning/     ✅ Prompt Preprocessor (chain-of-thought scaffolding)
+│   └── agent-cli/            ✅ Standalone .act() agent composing all suite tools
+└──
 ```
+
+The plugins and the CLI consume one set of tool implementations from `core/tools`
+(`createWebTools` / `createFsTools` / `createShellTool`) — no duplication between
+the in-app and standalone surfaces.
 
 ### Run the `web-tools` plugin in LM Studio
 
@@ -61,6 +68,19 @@ lms dev          # build + hot-reload into the running LM Studio app
 ```
 
 Each in-app plugin ships as its own package (manifest.json + package-lock.json) so it can be published independently with `lms push`; plugins import `@lmstudio-suite/core` and are bundled at build time.
+
+### Run the standalone agent CLI
+
+Drives a local model with the whole toolset via `.act()` (LM Studio must be running with its local server on and a model loaded):
+
+```bash
+# from the repo root
+npm start -w @lmstudio-suite/agent-cli -- "Find the latest LM Studio release and write a summary to notes.md" --shell
+# options: -m/--model <id>, --cwd <dir>, --max-rounds <n>, --shell, -h/--help
+# web search backend via env: SEARCH_PROVIDER, SEARCH_API_KEY, SEARXNG_URL
+```
+
+The agent always has `web_search`, `fetch_url`, `read_file`, `write_file`, `list_dir`; `--shell` adds `run_shell`.
 
 ## Develop
 

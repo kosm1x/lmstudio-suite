@@ -1,0 +1,12 @@
+{
+  "name": "@lmstudio-suite/plugin-reasoning",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio Prompt Preprocessor plugin: adds chain-of-thought scaffolding to each message.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}
