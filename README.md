@@ -13,15 +13,18 @@ It targets **both** integration surfaces LM Studio exposes:
 
 A shared `@lmstudio-suite/core` library holds the actual capability code so both surfaces reuse one implementation.
 
-## Capabilities (planned)
+## Capabilities
 
-| Capability                        | Surface                          | Status                                 |
-| --------------------------------- | -------------------------------- | -------------------------------------- |
-| **Web search + fetch**            | Tools Provider                   | ✅ built — `web-tools` plugin + core   |
-| **Filesystem + code exec**        | Tools Provider                   | ✅ built — `local-tools` plugin + core |
-| **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ built — `memory` plugin + core      |
-| **Structured output + reasoning** | Preprocessor + core helpers      | ✅ built — `reasoning` plugin + core   |
-| **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                 |
+All four plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
+[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning).
+
+| Capability                        | Surface                          | Status                                |
+| --------------------------------- | -------------------------------- | ------------------------------------- |
+| **Web search + fetch**            | Tools Provider                   | ✅ live — `web-tools` plugin + core   |
+| **Filesystem + code exec**        | Tools Provider                   | ✅ live — `local-tools` plugin + core |
+| **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ live — `memory` plugin + core      |
+| **Structured output + reasoning** | Preprocessor + core helpers      | ✅ live — `reasoning` plugin + core   |
+| **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                |
 
 ### Web search backends
 
@@ -110,6 +113,15 @@ npx vitest run packages/core/src/web    # scoped test run (full suite runs in CI
 ```
 
 > Note: building/running the in-app plugins requires the `lms` CLI and a running LM Studio instance (desktop app). The `core` library and its tests run anywhere with Node.
+
+## Troubleshooting
+
+- **`Error rendering prompt with jinja template: "Cannot call something that is not a function: got UndefinedValue"`** when `web-tools`/`local-tools` are enabled. The tools providers inject tool definitions, and your **model's chat template can't render tools**. Load a **tool-capable model** (it shows a tool/hammer badge in LM Studio; prefer `lmstudio-community` builds, which ship fixed templates) or override the prompt template. The `memory`/`reasoning` preprocessors add no tools and work with any model.
+- **`require is not defined in ES module scope`** at plugin load → the plugin `package.json` has `"type": "module"`; remove it (LM Studio bundles to CommonJS). The packaging script already omits it.
+- **`This prediction process is not attached to a working directory`** (`local-tools`) → the chat has no folder attached; the tools fall back to a temp sandbox. Attach a folder to the chat to operate on real files.
+- **`lms push` rejected / wrong account** → `manifest.owner` must equal your LM Studio Hub handle (not necessarily your GitHub handle).
+
+Full build/publish/runtime notes: **[docs/LEARNINGS.md](docs/LEARNINGS.md)**.
 
 ## Conventions
 
