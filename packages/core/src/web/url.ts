@@ -25,6 +25,7 @@ export function parseHttpUrl(raw: string): URL {
 export function isPrivateHost(hostname: string): boolean {
   let h = hostname.toLowerCase().trim();
   if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1); // unwrap IPv6 literal
+  if (h.endsWith(".") && !h.includes(":")) h = h.slice(0, -1); // drop FQDN root dot (localhost. -> localhost)
 
   if (
     h === "localhost" ||
@@ -72,5 +73,8 @@ export function isPrivateHost(hostname: string): boolean {
   if (a === 169 && b === 254) return true; // link-local (incl. cloud metadata)
   if (a === 192 && b === 168) return true; // 192.168/16
   if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking 198.18/15
+  if (a === 192 && b === 0 && Number(m[3]) === 0) return true; // IETF protocol 192.0.0/24
   return false;
 }

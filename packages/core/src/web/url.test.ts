@@ -58,4 +58,33 @@ describe("isPrivateHost", () => {
     // a public address in mapped form must still be allowed (no over-blocking)
     expect(isPrivateHost(host("http://[::ffff:8.8.8.8]/"))).toBe(false);
   });
+
+  it("blocks trailing-dot FQDNs and numeric IPv4 forms via URL.hostname (regression)", () => {
+    const host = (u: string) => new URL(u).hostname;
+    for (const u of [
+      "http://localhost./",
+      "http://foo.localhost./",
+      "http://2130706433/", // decimal 127.0.0.1
+      "http://0x7f000001/", // hex
+      "http://127.1/", // short form
+    ]) {
+      expect(isPrivateHost(host(u))).toBe(true);
+    }
+  });
+
+  it("blocks CGNAT / benchmarking / IETF ranges and respects their boundaries", () => {
+    for (const h of [
+      "100.64.0.1",
+      "100.127.255.1",
+      "198.18.0.1",
+      "198.19.0.1",
+      "192.0.0.1",
+    ]) {
+      expect(isPrivateHost(h)).toBe(true);
+    }
+    // just-outside addresses stay public
+    for (const h of ["100.63.0.1", "100.128.0.1", "198.20.0.1", "192.0.2.1"]) {
+      expect(isPrivateHost(h)).toBe(false);
+    }
+  });
 });
