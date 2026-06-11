@@ -126,12 +126,15 @@ function render(node: Node): string {
       return inner ? `*${inner}*` : "";
     }
     case "code": {
-      const inner = decodeEntities(stripTags(node.text)).trim();
+      // Use rawText (entities still encoded) so stripTags only strips genuine
+      // child tags; entity-encoded code like &lt;div&gt; survives, then we decode
+      // exactly once.
+      const inner = decodeEntities(stripTags(node.rawText)).trim();
       return inner ? `\`${inner}\`` : "";
     }
     case "pre": {
       // Strip any nested <code> tags (the most common pattern) from the fence.
-      const inner = decodeEntities(stripTags(node.text)).replace(/\n+$/, "");
+      const inner = decodeEntities(stripTags(node.rawText)).replace(/\n+$/, "");
       return `\n\n\`\`\`\n${inner}\n\`\`\`\n\n`;
     }
     case "a": {

@@ -35,14 +35,32 @@ export function isPrivateHost(hostname: string): boolean {
     return true;
   }
 
-  // IPv6
+  // Normalize IPv4-mapped / IPv4-compatible / NAT64 IPv6 to dotted IPv4 so the
+  // v4 private-range checks apply. URL.hostname compresses the embedded IPv4 to
+  // hex hextets (e.g. http://[::ffff:127.0.0.1]/ → "::ffff:7f00:1"), which the
+  // dotted-quad regex below would otherwise miss — a real SSRF bypass.
+  if (h.includes(":")) {
+    const dotted = /^(?:::ffff:|::)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(
+      h,
+    );
+    const hex =
+      /^(?:::ffff:|::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(h) ??
+      /^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(h);
+    if (dotted) {
+      h = dotted[1] ?? h;
+    } else if (hex) {
+      const hi = parseInt(hex[1] ?? "0", 16);
+      const lo = parseInt(hex[2] ?? "0", 16);
+      h = `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+    }
+  }
+
+  // IPv6 (non IPv4-embedded)
   if (h.includes(":")) {
     if (h === "::1" || h === "::") return true; // loopback / unspecified
     if (h.startsWith("fe80:")) return true; // link-local
     if (h.startsWith("fc") || h.startsWith("fd")) return true; // unique-local fc00::/7
-    if (h.startsWith("::ffff:"))
-      h = h.slice(7); // IPv4-mapped → fall through if dotted
-    else return false;
+    return false;
   }
 
   // IPv4 (dotted quad)

@@ -44,4 +44,18 @@ describe("isPrivateHost", () => {
       expect(isPrivateHost(h)).toBe(true);
     }
   });
+
+  it("blocks IPv4-mapped/compat IPv6 as URL.hostname compresses them (regression)", () => {
+    const host = (u: string) => new URL(u).hostname; // e.g. "[::ffff:7f00:1]"
+    for (const u of [
+      "http://[::ffff:127.0.0.1]/",
+      "http://[::ffff:169.254.169.254]/", // cloud metadata
+      "http://[::ffff:10.0.0.1]/",
+      "http://[::127.0.0.1]/",
+    ]) {
+      expect(isPrivateHost(host(u))).toBe(true);
+    }
+    // a public address in mapped form must still be allowed (no over-blocking)
+    expect(isPrivateHost(host("http://[::ffff:8.8.8.8]/"))).toBe(false);
+  });
 });

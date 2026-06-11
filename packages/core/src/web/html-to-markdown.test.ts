@@ -59,6 +59,14 @@ describe("htmlToMarkdown", () => {
     expect(md).toContain("const a = 1;");
     expect(md).toContain("const b = 2;");
   });
+
+  it("keeps entity-encoded markup inside code/pre (regression)", () => {
+    expect(htmlToMarkdown(`<code>&lt;div&gt;</code>`)).toContain("`<div>`");
+    const md = htmlToMarkdown(
+      `<pre><code>&lt;script&gt;alert(1)&lt;/script&gt;</code></pre>`,
+    );
+    expect(md).toContain("<script>alert(1)</script>");
+  });
 });
 
 describe("extractTitle", () => {
