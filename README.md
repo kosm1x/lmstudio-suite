@@ -118,7 +118,8 @@ npx vitest run packages/core/src/web    # scoped test run (full suite runs in CI
 
 - **`Error rendering prompt with jinja template: "Cannot call something that is not a function: got UndefinedValue"`** when `web-tools`/`local-tools` are enabled. The tools providers inject tool definitions, and your **model's chat template can't render tools**. Load a **tool-capable model** (it shows a tool/hammer badge in LM Studio; prefer `lmstudio-community` builds, which ship fixed templates) or override the prompt template. The `memory`/`reasoning` preprocessors add no tools and work with any model.
 - **`require is not defined in ES module scope`** at plugin load → the plugin `package.json` has `"type": "module"`; remove it (LM Studio bundles to CommonJS). The packaging script already omits it.
-- **`This prediction process is not attached to a working directory`** (`local-tools`) → the chat has no folder attached; the tools fall back to a temp sandbox. Attach a folder to the chat to operate on real files.
+- **`local-tools` operates on a temp sandbox, not my project** → set the plugin's **Working directory** config field to your project folder (e.g. `~/projects/my-app`). LM Studio has no "attach a folder to a chat" feature, so this field is how you point the tools at real files. (`This prediction process is not attached to a working directory` is the same root cause — no directory set; the tools fall back to a temp sandbox.)
+- **A new config field / fix doesn't show up after `lms push`** → installed plugins don't auto-update. Update/reinstall the plugin in LM Studio (`⋯` → update, or reinstall from the Hub). Confirm the change is published first via `lmstudio.ai/<owner>/<name>/files/src/index.ts`.
 - **`lms push` rejected / wrong account** → `manifest.owner` must equal your LM Studio Hub handle (not necessarily your GitHub handle).
 
 Full build/publish/runtime notes: **[docs/LEARNINGS.md](docs/LEARNINGS.md)**.

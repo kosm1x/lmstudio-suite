@@ -26,6 +26,9 @@ The plugins import the unpublished workspace package `@lmstudio-suite/core`, so 
 
 - **Tools providers require a tool-capable model.** If the loaded model's chat template can't render tool definitions, enabling `web-tools`/`local-tools` makes every message fail with: `Error rendering prompt with jinja template: "Cannot call something that is not a function: got UndefinedValue"`. This is the model's template (often a missing `raise_exception` in a branch your tools trip), not the plugin. Fix: load a model with the **tool/hammer badge**, preferring `lmstudio-community` builds (fixed templates), or override the prompt template.
 - **Prompt preprocessors (`memory`, `reasoning`) are model-agnostic** — they only modify the message text, add no tools, and work with any model.
+- **There is no "attach a folder to a chat" feature in LM Studio.** `getWorkingDirectory()` only ever returns an auto per-chat sandbox (or throws). For a filesystem plugin to operate on a real project, expose your **own config field** for the base directory (we added `local-tools`' "Working directory", with `~` expansion; peer plugins default to `~/`). The `ScopedFs` path-guard still confines the model to whatever directory is configured.
+- **Installed plugins do NOT auto-update.** `lms push` publishes a new Hub revision, but an already-installed copy keeps its old code _and config schematics_ until you update/reinstall it in the app (`⋯` menu → update, or uninstall + reinstall from the Hub). If a new config field "doesn't show up," the install is stale — verify the field landed via `…/files/src/index.ts` on the Hub, then reinstall.
+- **For real coding on a specific folder, the standalone `agent-cli` (`--cwd <dir> --shell`) is the better fit** than the in-app plugin — you control the directory directly and it runs an autonomous `.act()` loop, no per-message tool toggling or plugin reinstalls.
 
 ## Quality / audit
 
