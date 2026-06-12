@@ -32,6 +32,13 @@ describe("runShell", () => {
     const r = await runShell("sleep 5", { signal: AbortSignal.abort() });
     expect(r.signal).toBe("SIGKILL");
   });
+
+  it("reports a clear error when the cwd does not exist", async () => {
+    const r = await runShell("ls", { cwd: "/no/such/dir/on/this/box" });
+    expect(r.exitCode).toBeNull();
+    expect(r.stderr).toMatch(/working directory does not exist/);
+    expect(r.stderr).not.toMatch(/spawn .* ENOENT/);
+  });
 });
 
 describe("runShell utf-8", () => {

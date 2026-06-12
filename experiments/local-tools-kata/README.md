@@ -16,8 +16,11 @@ install) defines the correct behavior. Success = all 10 green.
    `Cannot call something that is not a function` on every message. Prefer an
    `lmstudio-community` build with the tool/hammer badge.
 3. **Enable the `local-tools` plugin** in this chat.
-4. **Set the plugin's "Working directory"** config field to the absolute path of
-   this folder, e.g. `~/claude/lmstudio-suite/experiments/local-tools-kata`.
+4. **Set the plugin's "Working directory"** config field to the **real absolute
+   path of this folder on your machine**. Get it by running, in your local clone:
+   `cd experiments/local-tools-kata && pwd` — paste that exact output (e.g.
+   `/Users/you/dev/lmstudio-suite/experiments/local-tools-kata`). The path must
+   exist locally; a wrong/foreign path makes every tool fail (see Troubleshooting).
 5. **Turn on "Enable run_shell"** in the plugin config (off by default) so the
    model can run the tests.
 6. LM Studio per-tool permissions: `read` = Allow, `write`/`shell` = Ask is a
@@ -66,3 +69,15 @@ cd experiments/local-tools-kata && node --test
 ```
 
 Broken state = 8 fail / 2 pass. Solved = 10 pass.
+
+## Troubleshooting
+
+- **`run_shell` returns `spawn /bin/sh ENOENT`** (and `list_dir`/`read_file`
+  also fail) → the configured **Working directory does not exist on this
+  machine**. It is not a missing-shell or Windows problem. Set the field to the
+  real local `pwd` of this folder (step 4). Sanity check: the first `list_dir .`
+  should show `src`, `test`, `package.json` — if it says `(empty directory)` the
+  path is still wrong. (Newer plugin builds report this as
+  `working directory does not exist: <path>` instead of the cryptic ENOENT.)
+- **Every message errors with `Cannot call something that is not a function`** →
+  the loaded model isn't tool-capable. Switch to a tool/hammer-badge model.

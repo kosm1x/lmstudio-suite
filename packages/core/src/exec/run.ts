@@ -8,6 +8,7 @@
  * enable it where you trust the model + prompt.
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 
 export interface RunOptions {
@@ -83,6 +84,22 @@ function runProcess(
   const detached = process.platform !== "win32";
 
   return new Promise<RunResult>((resolveResult) => {
+    // A non-existent cwd makes spawn fail with a misleading "spawn <file> ENOENT"
+    // that names the shell binary, not the missing directory — turn it into a
+    // clear, actionable message instead. (This is the usual cause when the
+    // local-tools "Working directory" is set to a path that isn't on this box.)
+    if (cwd !== undefined && !existsSync(cwd)) {
+      resolveResult({
+        stdout: "",
+        stderr: `Error: working directory does not exist: ${cwd}`,
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        truncated: false,
+      });
+      return;
+    }
+
     const child = spawn(file, args, { cwd, env: env ?? process.env, detached });
 
     const killChild = () => {
