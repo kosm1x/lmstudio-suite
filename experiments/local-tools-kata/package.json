@@ -1,0 +1,10 @@
+{
+  "name": "local-tools-kata",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny zero-dependency kata for testing the lmstudio-suite local-tools plugin: fix the bugs until `node --test` passes.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
