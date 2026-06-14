@@ -120,6 +120,7 @@ var ScopedFs = class {
 
 // packages/core/src/exec/run.ts
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 function shellInvocation() {
   return process.platform === "win32" ? [process.env.ComSpec ?? "cmd.exe", "/c"] : ["/bin/sh", "-c"];
@@ -138,6 +139,17 @@ function runProcess(file, args, options) {
   } = options;
   const detached = process.platform !== "win32";
   return new Promise((resolveResult) => {
+    if (cwd !== void 0 && !existsSync(cwd)) {
+      resolveResult({
+        stdout: "",
+        stderr: `Error: working directory does not exist: ${cwd}`,
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        truncated: false
+      });
+      return;
+    }
     const child = spawn(file, args, { cwd, env: env ?? process.env, detached });
     const killChild = () => {
       if (detached && typeof child.pid === "number") {
@@ -313,6 +325,10 @@ ${r.stderr}`);
     }
   });
 }
+
+// packages/core/src/tools/map-tools.ts
+import { tool as tool3 } from "@lmstudio/sdk";
+import { z as z3 } from "zod";
 
 // packages/plugin-local/src/tools.ts
 async function resolveRoot(ctl, configuredDir) {

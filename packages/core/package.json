@@ -10,7 +10,8 @@
     "./fs": "./src/fs/index.ts",
     "./exec": "./src/exec/index.ts",
     "./rag": "./src/rag/index.ts",
-    "./reasoning": "./src/reasoning/index.ts"
+    "./reasoning": "./src/reasoning/index.ts",
+    "./kb": "./src/kb/index.ts"
   },
   "dependencies": {
     "@lmstudio/sdk": "^1.5.0",

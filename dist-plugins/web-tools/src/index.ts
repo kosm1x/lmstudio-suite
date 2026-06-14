@@ -6603,6 +6603,10 @@ ${page.markdown}`;
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
 
+// packages/core/src/tools/map-tools.ts
+import { tool as tool3 } from "@lmstudio/sdk";
+import { z as z3 } from "zod";
+
 // packages/plugin-web/src/tools.ts
 async function toolsProvider(ctl) {
   const global2 = ctl.getGlobalPluginConfig(globalConfigSchematics);

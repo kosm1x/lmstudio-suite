@@ -1,0 +1,12 @@
+{
+  "name": "@lmstudio-suite/plugin-kbmap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio plugin: structural 'map memory' — an always-on index of a knowledge-base directory plus navigation tools (overview / search / read / follow-links).",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}

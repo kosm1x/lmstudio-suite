@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
 import { parseArgs } from "./args";
 
 describe("parseArgs", () => {
@@ -29,6 +30,13 @@ describe("parseArgs", () => {
     expect(a.maxRounds).toBe(8);
     expect(a.shell).toBe(false);
     expect(a.model).toBeUndefined();
+    expect(a.kb).toBeUndefined();
+  });
+
+  it("resolves --kb to an absolute path", () => {
+    const a = parseArgs(["--kb", "notes", "recall"]);
+    expect(a.kb).toBe(resolve("notes"));
+    expect(a.prompt).toBe("recall");
   });
 
   it("recognizes --help", () => {

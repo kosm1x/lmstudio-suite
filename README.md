@@ -15,16 +15,18 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities
 
-All four plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
+Four plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
 [`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning).
+A fifth, **`kb-map`** (structural "map memory"), is built and bundle-ready but not yet published — package it with `npm run package:plugins`, then `lms push`.
 
-| Capability                        | Surface                          | Status                                |
-| --------------------------------- | -------------------------------- | ------------------------------------- |
-| **Web search + fetch**            | Tools Provider                   | ✅ live — `web-tools` plugin + core   |
-| **Filesystem + code exec**        | Tools Provider                   | ✅ live — `local-tools` plugin + core |
-| **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ live — `memory` plugin + core      |
-| **Structured output + reasoning** | Preprocessor + core helpers      | ✅ live — `reasoning` plugin + core   |
-| **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                |
+| Capability                        | Surface                          | Status                                 |
+| --------------------------------- | -------------------------------- | -------------------------------------- |
+| **Web search + fetch**            | Tools Provider                   | ✅ live — `web-tools` plugin + core    |
+| **Filesystem + code exec**        | Tools Provider                   | ✅ live — `local-tools` plugin + core  |
+| **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ live — `memory` plugin + core       |
+| **Map memory (KB navigation)**    | Preprocessor + Tools Provider    | ✅ built — `kb-map` plugin + `core/kb` |
+| **Structured output + reasoning** | Preprocessor + core helpers      | ✅ live — `reasoning` plugin + core    |
+| **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                 |
 
 ### Web search backends
 
@@ -48,10 +50,12 @@ lmstudio-suite/
 │   │       ├── exec/         runShell / runNode (timeout + caps)   ✅
 │   │       ├── rag/          chunk + cosine VectorStore + index    ✅
 │   │       ├── reasoning/    extractJson + generateStructured + CoT ✅
-│   │       └── tools/        shared SDK tool() builders (web/fs/shell) ✅
+│   │       ├── kb/           frontmatter + [[links]] graph + map digest ✅
+│   │       └── tools/        shared SDK tool() builders (web/fs/shell/map) ✅
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url)
 │   ├── plugin-local/         ✅ Tools Provider (read/write/list_dir + opt-in run_shell)
 │   ├── plugin-memory/        ✅ Prompt Preprocessor (RAG over a knowledge dir)
+│   ├── plugin-kbmap/         ✅ Preprocessor + Tools Provider (map memory over a KB)
 │   ├── plugin-reasoning/     ✅ Prompt Preprocessor (chain-of-thought scaffolding)
 │   └── agent-cli/            ✅ Standalone .act() agent composing all suite tools
 └──

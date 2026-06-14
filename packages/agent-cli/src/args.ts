@@ -7,6 +7,8 @@ export interface CliArgs {
   cwd: string;
   maxRounds: number;
   shell: boolean;
+  /** Knowledge-base directory for the map-memory tools (absolute). */
+  kb?: string;
   help: boolean;
 }
 
@@ -30,6 +32,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case "--cwd":
         args.cwd = resolve(argv[++i] ?? ".");
+        break;
+      case "--kb":
+        args.kb = resolve(argv[++i] ?? ".");
         break;
       case "--max-rounds":
         args.maxRounds = Math.max(1, Number(argv[++i] ?? "8") || 8);
@@ -61,6 +66,7 @@ Options:
       --cwd <dir>      Working directory for file/shell tools (default: cwd)
       --max-rounds <n> Max agent prediction rounds (default: 8)
       --shell          Enable the run_shell tool (off by default)
+      --kb <dir>       Knowledge-base dir to expose as map-memory tools
   -h, --help           Show this help
 
 Environment (web search):
@@ -69,4 +75,6 @@ Environment (web search):
   SEARXNG_URL      Base URL for a self-hosted SearXNG instance
 
 The agent always has: web_search, fetch_url, read_file, write_file, list_dir.
-With --shell it also gets run_shell (commands run with your privileges).`;
+With --shell it also gets run_shell (commands run with your privileges).
+With --kb it also gets map_overview, search_map, read_node, follow_links over
+that knowledge base.`;

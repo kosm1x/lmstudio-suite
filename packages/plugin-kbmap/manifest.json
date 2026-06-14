@@ -1,0 +1,14 @@
+{
+  "name": "kb-map",
+  "owner": "kosmix",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": [
+    "memory",
+    "retrieval",
+    "knowledge-base",
+    "prompt-preprocessor",
+    "tools"
+  ]
+}

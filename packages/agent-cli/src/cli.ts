@@ -9,8 +9,11 @@ import type { ChatMessage, Tool } from "@lmstudio/sdk";
 import {
   createClient,
   createFsTools,
+  createMapTools,
   createShellTool,
   createWebTools,
+  scanKbDir,
+  type KbGraph,
   type SearchConfig,
   type SearchProviderName,
 } from "@lmstudio-suite/core";
@@ -40,6 +43,14 @@ async function run(): Promise<void> {
     ...createFsTools({ root: args.cwd }),
   ];
   if (args.shell) tools.push(createShellTool({ cwd: args.cwd }));
+
+  if (args.kb) {
+    const kbRoot = args.kb;
+    let graph: KbGraph | undefined;
+    const loadGraph = async (): Promise<KbGraph> =>
+      (graph ??= (await scanKbDir(kbRoot)).graph);
+    tools.push(...createMapTools({ root: kbRoot, loadGraph }));
+  }
 
   const client = createClient();
   const model = args.model

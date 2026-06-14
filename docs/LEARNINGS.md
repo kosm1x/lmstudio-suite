@@ -35,6 +35,13 @@ The plugins import the unpublished workspace package `@lmstudio-suite/core`, so 
 - We ran the qa gate as **three rounds** _after_ the first pushes (it should gate _before_). It caught real bugs each round, most importantly an SSRF hole that took two iterations to fully close.
 - **Test SSRF host guards through `new URL(u).hostname`, not raw strings.** `URL.hostname` compresses IPv4-mapped IPv6 (`http://[::ffff:127.0.0.1]/` → `[::ffff:7f00:1]`) and normalizes decimal/hex/octal IPv4 — a guard that only checks dotted-quad strings is bypassable. Also handle trailing-dot FQDNs (`localhost.`) and re-validate every redirect hop.
 
+## kb-map — structural "map memory" (a third retrieval style)
+
+- **Three retrieval styles, not two.** `memory` = semantic RAG (embeddings, top-K, similarity threshold; opaque chunks). `local-tools` = raw fs (the model crawls blind). `kb-map` = a structural, always-on index + agentic navigation — the port of how a good `MEMORY.md` works (scan the map, read only what's relevant, follow `[[links]]`). It needs **no embedding model**: cheap, deterministic, structure-aware. Reach for it when structure/relationships matter and you want the model to drive; reach for RAG when fuzzy semantic recall matters.
+- **Inject the map AND expose the tools.** The preprocessor-injected digest is the priming ("you have a memory, here's its shape") that makes a model actually call the tools; the tools (`map_overview`/`search_map`/`read_node`/`follow_links`) give depth a one-shot injection can't. Either alone underperforms.
+- **A budget that isn't a hard bound silently bloats every-turn context.** First cut only triggered the "+N more" rollup _inside_ a folder's node loop, so the per-folder heading + first entry always emitted — a one-folder-per-note vault blew `maxChars` by up to ~38× (warm tier had no budget check at all). Fix: account headings + the warm section in the running total, gate rollup on the running total (not "have I shown ≥1 here"), and **reserve headroom so the trailing summary always fits** — otherwise you stay under budget but drop the "+N more" marker, i.e. silently truncate.
+- **Scope a read tool to the index, not just the root.** `read_node` originally read any file under the KB root via ScopedFs. ScopedFs blocks `..` traversal but not a `.env`/key that simply _sits_ in the root — `collectKbFiles` hides it from the map, but the model could still read it by path. Gate the read to entries present in the graph (membership check), and allowlist write extensions. The traversal guard and the visibility policy are two different controls.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).

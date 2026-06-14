@@ -30,7 +30,13 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_ROOT = join(ROOT, "dist-plugins");
 
-const PLUGINS = ["plugin-web", "plugin-local", "plugin-memory", "plugin-reasoning"];
+const PLUGINS = [
+  "plugin-web",
+  "plugin-local",
+  "plugin-memory",
+  "plugin-reasoning",
+  "plugin-kbmap",
+];
 
 // Keep in lockstep with the workspace. zod must match @lmstudio/sdk's peer (^3).
 const DEPS = { "@lmstudio/sdk": "^1.5.0", zod: "^3.25.76" };

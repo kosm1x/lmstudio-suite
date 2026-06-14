@@ -212,6 +212,10 @@ import { z } from "zod";
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
 
+// packages/core/src/tools/map-tools.ts
+import { tool as tool3 } from "@lmstudio/sdk";
+import { z as z3 } from "zod";
+
 // packages/plugin-memory/src/index-builder.ts
 var TEXT_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".markdown", ".txt", ".text"]);
 var MAX_FILES = 200;
