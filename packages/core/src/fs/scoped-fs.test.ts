@@ -59,4 +59,21 @@ describe("ScopedFs operations", () => {
   it("refuses to remove the root", async () => {
     await expect(fs.remove(".")).rejects.toThrow(/root directory/);
   });
+
+  it("moves a file within the root, creating parent dirs", async () => {
+    await fs.writeFile("incoming/a.md", "body");
+    await fs.move("incoming/a.md", "projects/a.md");
+    expect(await fs.exists("incoming/a.md")).toBe(false);
+    expect(await fs.readFile("projects/a.md")).toBe("body");
+  });
+
+  it("rejects a move that escapes the root on either end", async () => {
+    await fs.writeFile("incoming/a.md", "body");
+    await expect(fs.move("incoming/a.md", "../escape.md")).rejects.toThrow(
+      PathEscapeError,
+    );
+    await expect(fs.move("../outside.md", "notes/a.md")).rejects.toThrow(
+      PathEscapeError,
+    );
+  });
 });

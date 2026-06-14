@@ -14,7 +14,7 @@ TODAY="$(date +%Y-%m-%d)"
 
 # archive/ is kb-map's default "warm" tier (searchable, not in the always-on
 # map). Everything else shows in the map.
-for d in projects areas notes references daily archive templates; do
+for d in incoming projects areas notes references daily archive templates; do
   mkdir -p "$KB_DIR/$d"
 done
 
@@ -55,6 +55,7 @@ Files with no frontmatter still work — the map derives a hook from the first h
 
 ## Folders
 
+- `incoming/`   inbox — new captures (write_node) land here; sort later with organize_incoming
 - `projects/`   active work, one file per project
 - `areas/`      standing topics / areas you maintain over time
 - `notes/`      atomic notes and ideas (one idea per file)
@@ -69,6 +70,9 @@ Files with no frontmatter still work — the map derives a hook from the first h
 2. Set **Knowledge directory** (global config) to this folder's **absolute path**.
 3. Ask a tool-capable model about your notes — it gets the map each turn and can
    `map_overview` / `search_map` / `read_node` / `follow_links`.
+4. To save a response, enable **write_node** (per-chat config) and say "save that
+   to my KB"; it lands in `incoming/` with frontmatter. Later, "organize my
+   incoming" runs `organize_incoming` to sort it into folders by type/tags.
 EOF
 
 seed "projects/example-project.md" <<'EOF'

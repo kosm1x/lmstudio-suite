@@ -88,6 +88,13 @@ var ScopedFs = class {
     await fsp.mkdir(dirname(p), { recursive: true });
     await fsp.writeFile(p, content, "utf-8");
   }
+  /** Move/rename a file within the root; both ends are traversal-guarded. */
+  async move(fromRel, toRel) {
+    const from = this.resolvePath(fromRel);
+    const to = this.resolvePath(toRel);
+    await fsp.mkdir(dirname(to), { recursive: true });
+    await fsp.rename(from, to);
+  }
   async list(relPath = ".") {
     const p = this.resolvePath(relPath);
     const entries = await fsp.readdir(p, { withFileTypes: true });

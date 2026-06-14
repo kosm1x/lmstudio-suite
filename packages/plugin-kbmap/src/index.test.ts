@@ -43,7 +43,11 @@ const message = (text: string) =>
 
 // A function, not a const: `root` is only assigned in beforeAll, so a top-level
 // object literal would capture the empty initial value.
-const GLOBAL = (): Cfg => ({ knowledgeDir: root, warmFolders: ["archive"] });
+const GLOBAL = (): Cfg => ({
+  knowledgeDir: root,
+  warmFolders: ["archive"],
+  incomingFolder: "incoming",
+});
 const CHAT = { injectMap: true, mapMaxChars: 4000, enableWrite: false };
 
 describe("kb-map preprocess", () => {
@@ -100,10 +104,12 @@ describe("kb-map toolsProvider", () => {
     ]);
   });
 
-  it("adds write_node when enableWrite is on", async () => {
+  it("adds write_node + organize_incoming when enableWrite is on", async () => {
     const tools = await toolsProvider(
       controller(GLOBAL(), { ...CHAT, enableWrite: true }),
     );
-    expect(tools.map((t) => t.name)).toContain("write_node");
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("write_node");
+    expect(names).toContain("organize_incoming");
   });
 });

@@ -13,3 +13,4 @@ export * from "./graph";
 export * from "./scan";
 export * from "./digest";
 export * from "./search";
+export * from "./organize";

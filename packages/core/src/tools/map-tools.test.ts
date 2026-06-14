@@ -60,8 +60,10 @@ describe("createMapTools", () => {
     ).toEqual(["follow_links", "map_overview", "read_node", "search_map"]);
   });
 
-  it("adds write_node only when enabled", () => {
-    expect(make(true).map((t) => t.name)).toContain("write_node");
+  it("adds write_node + organize_incoming only when enabled", () => {
+    const names = make(true).map((t) => t.name);
+    expect(names).toContain("write_node");
+    expect(names).toContain("organize_incoming");
   });
 
   it("map_overview renders the digest and a single folder", async () => {
@@ -123,5 +125,56 @@ describe("createMapTools", () => {
     });
     expect(out).toMatch(/only writes text notes/);
     await expect(fsp.access(join(root, "evil.sh"))).rejects.toThrow();
+  });
+});
+
+describe("organize_incoming", () => {
+  let kb = "";
+
+  beforeAll(async () => {
+    kb = await fsp.mkdtemp(join(tmpdir(), "kb-organize-"));
+    await fsp.mkdir(join(kb, "incoming"), { recursive: true });
+    await fsp.writeFile(
+      join(kb, "incoming", "a.md"),
+      "---\nname: a\nmetadata:\n  type: project\n---\nx",
+    );
+    await fsp.writeFile(
+      join(kb, "incoming", "b.md"),
+      "---\nname: b\ntags: [random]\n---\ny",
+    );
+  });
+  afterAll(async () => {
+    if (kb) await fsp.rm(kb, { recursive: true, force: true });
+  });
+
+  const tools = () =>
+    createMapTools({
+      root: kb,
+      enableWrite: true,
+      loadGraph: async () => (await scanKbDir(kb)).graph,
+    });
+
+  it("previews moves without touching disk (apply=false)", async () => {
+    const out = await call(tools(), "organize_incoming", { apply: false });
+    expect(out).toContain("incoming/a.md → projects/a.md");
+    expect(out).toContain("(type=project)");
+    expect(out).toContain("Left in incoming/ (no type/tag): incoming/b.md");
+    // nothing moved yet
+    expect(
+      await fsp.access(join(kb, "incoming", "a.md")).then(() => true),
+    ).toBe(true);
+  });
+
+  it("performs the moves with apply=true and leaves un-routable notes", async () => {
+    const out = await call(tools(), "organize_incoming", { apply: true });
+    expect(out).toContain("Moved 1 note(s).");
+    expect(await fsp.readFile(join(kb, "projects", "a.md"), "utf-8")).toContain(
+      "x",
+    );
+    await expect(fsp.access(join(kb, "incoming", "a.md"))).rejects.toThrow();
+    // b.md had no usable type/tag → stays put
+    expect(await fsp.readFile(join(kb, "incoming", "b.md"), "utf-8")).toContain(
+      "y",
+    );
   });
 });

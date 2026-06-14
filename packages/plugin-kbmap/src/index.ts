@@ -68,10 +68,18 @@ export async function toolsProvider(
   if (!dir) return []; // inert until a knowledge directory is configured
 
   const warmFolders = global.get("warmFolders");
+  // Must be a single top-level folder name (the organizer matches it against a
+  // node's top-level dir); a path or `..` would silently sort nothing.
+  const rawIncoming = global.get("incomingFolder").trim();
+  const incomingFolder =
+    rawIncoming && !rawIncoming.includes("/") && !rawIncoming.includes("..")
+      ? rawIncoming
+      : "incoming";
   return createMapTools({
     root: dir,
     enableWrite: chat.get("enableWrite"),
     digestMaxChars: chat.get("mapMaxChars"),
+    incomingFolder,
     loadGraph: () => getOrBuildKbGraph(dir, warmFolders),
   });
 }

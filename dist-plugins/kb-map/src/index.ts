@@ -49,6 +49,13 @@ var ScopedFs = class {
     await fsp.mkdir(dirname(p), { recursive: true });
     await fsp.writeFile(p, content, "utf-8");
   }
+  /** Move/rename a file within the root; both ends are traversal-guarded. */
+  async move(fromRel, toRel) {
+    const from = this.resolvePath(fromRel);
+    const to = this.resolvePath(toRel);
+    await fsp.mkdir(dirname(to), { recursive: true });
+    await fsp.rename(from, to);
+  }
   async list(relPath = ".") {
     const p = this.resolvePath(relPath);
     const entries = await fsp.readdir(p, { withFileTypes: true });
@@ -489,6 +496,55 @@ function searchNodes(graph, query, limit = 12) {
   return hits.slice(0, limit);
 }
 
+// packages/core/src/kb/organize.ts
+var DEFAULT_TYPE_FOLDERS = {
+  project: "projects",
+  area: "areas",
+  reference: "references",
+  note: "notes",
+  daily: "daily"
+};
+function basename2(path) {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? path : path.slice(slash + 1);
+}
+function destFolderFor(node, typeFolders, knownFolders) {
+  const type = node.type?.toLowerCase();
+  if (type && typeFolders[type]) {
+    return { folder: typeFolders[type], reason: `type=${type}` };
+  }
+  for (const tag of node.tags) {
+    const t = tag.toLowerCase();
+    if (typeFolders[t]) return { folder: typeFolders[t], reason: `tag=${tag}` };
+    if (knownFolders.has(t)) return { folder: t, reason: `tag=${tag}` };
+  }
+  return null;
+}
+function planIncomingMoves(graph, options = {}) {
+  const incoming = options.incomingFolder ?? "incoming";
+  const typeFolders = options.typeFolders ?? DEFAULT_TYPE_FOLDERS;
+  const knownFolders = new Set(Object.values(typeFolders));
+  const moves = [];
+  const conflicts = [];
+  const unsorted = [];
+  for (const node of graph.nodes) {
+    if (node.dir !== incoming) continue;
+    const dest = destFolderFor(node, typeFolders, knownFolders);
+    const folder = dest?.folder ?? options.defaultFolder;
+    if (!folder || folder === incoming) {
+      unsorted.push({ path: node.path, reason: "no type/tag match" });
+      continue;
+    }
+    const to = `${folder}/${basename2(node.path)}`;
+    if (graph.get(to)) {
+      conflicts.push({ from: node.path, to, reason: "target already exists" });
+      continue;
+    }
+    moves.push({ from: node.path, to, reason: dest?.reason ?? "default" });
+  }
+  return { moves, conflicts, unsorted };
+}
+
 // packages/core/src/tools/web-tools.ts
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
@@ -507,6 +563,7 @@ function createMapTools(options) {
   const { root, loadGraph } = options;
   const fs = new ScopedFs(root);
   const digestMaxChars = options.digestMaxChars ?? 4e3;
+  const incomingFolder = options.incomingFolder ?? "incoming";
   const tools = [
     tool3({
       name: "map_overview",
@@ -590,12 +647,22 @@ function createMapTools(options) {
     tools.push(
       tool3({
         name: "write_node",
-        description: "Create or update a knowledge-base entry. Provide a path ending in .md and the full file contents \u2014 ideally with `name:` and `description:` frontmatter so it indexes cleanly into the map. The map refreshes automatically on the next turn.",
+        description: `Save a note into the knowledge base. For a NEW capture, write it to \`${incomingFolder}/<kebab-name>.md\` (the inbox; organize_incoming sorts it later). ALWAYS begin the file with YAML frontmatter and fill every field:
+---
+name: <kebab-slug matching the filename>
+description: <one concise sentence summarising the note>
+metadata:
+  type: <project | area | note | reference>
+tags: [<2-5 lowercase topic tags>]
+---
+Then a \`# Title\` and the body. Good name/description/type/tags are what let the note be sorted and found later, so do not leave them blank. The map refreshes automatically on the next turn.`,
         parameters: {
           path: z3.string().describe(
-            "Destination path relative to the KB root (e.g. 'notes/x.md')."
+            `Destination path relative to the KB root, ending in .md (e.g. '${incomingFolder}/my-note.md').`
           ),
-          content: z3.string().describe("Full file contents to write.")
+          content: z3.string().describe(
+            "Full file contents, starting with the YAML frontmatter block."
+          )
         },
         implementation: async ({ path, content }, { status, warn }) => {
           status(`Writing ${path}`);
@@ -610,6 +677,67 @@ function createMapTools(options) {
             warn(`write_node failed: ${m}`);
             return `Error: ${m}`;
           }
+        }
+      }),
+      tool3({
+        name: "organize_incoming",
+        description: `Sort the \`${incomingFolder}/\` inbox into the knowledge base's folders using each note's frontmatter type and tags (type: project \u2192 projects/, a 'reference' tag \u2192 references/, etc.). Call with apply=false (default) to PREVIEW the moves, then apply=true to perform them. Notes with no usable type/tag are left in the inbox.`,
+        parameters: {
+          apply: z3.boolean().default(false).describe("false = preview the plan; true = perform the moves.")
+        },
+        implementation: async ({ apply }, { status, warn }) => {
+          status(
+            apply ? `Organizing ${incomingFolder}/` : `Previewing ${incomingFolder}/ sort`
+          );
+          const graph = await loadGraph();
+          const plan = planIncomingMoves(graph, { incomingFolder });
+          const movable = [];
+          for (const m of plan.moves) {
+            if (await fs.exists(m.to)) {
+              plan.conflicts.push({
+                from: m.from,
+                to: m.to,
+                reason: "target already exists"
+              });
+            } else {
+              movable.push(m);
+            }
+          }
+          if (movable.length === 0 && plan.conflicts.length === 0) {
+            return plan.unsorted.length > 0 ? `Nothing to sort: ${plan.unsorted.length} note(s) in ${incomingFolder}/ have no type/tag to route on.` : `${incomingFolder}/ is empty \u2014 nothing to organize.`;
+          }
+          const lines = [];
+          if (!apply) {
+            lines.push(
+              `Planned moves (re-run organize_incoming with apply=true to perform):`
+            );
+            for (const m of movable)
+              lines.push(`  ${m.from} \u2192 ${m.to}   (${m.reason})`);
+          } else {
+            let moved = 0;
+            for (const m of movable) {
+              try {
+                await fs.move(m.from, m.to);
+                moved++;
+              } catch (err) {
+                const e = msg(err);
+                warn(`move failed: ${e}`);
+                plan.conflicts.push({ from: m.from, to: m.to, reason: e });
+              }
+            }
+            lines.push(`Moved ${moved} note(s).`);
+          }
+          if (plan.conflicts.length > 0) {
+            lines.push(`Skipped (conflicts):`);
+            for (const c of plan.conflicts)
+              lines.push(`  ${c.from} \u2192 ${c.to}   (${c.reason})`);
+          }
+          if (plan.unsorted.length > 0) {
+            lines.push(
+              `Left in ${incomingFolder}/ (no type/tag): ${plan.unsorted.map((u) => u.path).join(", ")}`
+            );
+          }
+          return lines.join("\n");
         }
       })
     );
@@ -640,6 +768,15 @@ var globalConfigSchematics = createConfigSchematics().field(
     hint: "Top-level folders kept out of the always-on map and reached only via search_map. Good for large archives."
   },
   ["archive"]
+).field(
+  "incomingFolder",
+  "string",
+  {
+    displayName: "Inbox folder",
+    hint: "Folder new captures (write_node) land in, and that organize_incoming sorts by type/tags. Relative to the knowledge directory.",
+    placeholder: "incoming"
+  },
+  "incoming"
 ).build();
 var chatConfigSchematics = createConfigSchematics().field(
   "injectMap",
@@ -741,10 +878,13 @@ async function toolsProvider(ctl) {
   const dir = expandHome(global.get("knowledgeDir").trim());
   if (!dir) return [];
   const warmFolders = global.get("warmFolders");
+  const rawIncoming = global.get("incomingFolder").trim();
+  const incomingFolder = rawIncoming && !rawIncoming.includes("/") && !rawIncoming.includes("..") ? rawIncoming : "incoming";
   return createMapTools({
     root: dir,
     enableWrite: chat.get("enableWrite"),
     digestMaxChars: chat.get("mapMaxChars"),
+    incomingFolder,
     loadGraph: () => getOrBuildKbGraph(dir, warmFolders)
   });
 }

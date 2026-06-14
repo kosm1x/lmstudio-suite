@@ -13,6 +13,7 @@ import { tool, type Tool } from "@lmstudio/sdk";
 import { z } from "zod";
 import { ScopedFs } from "../fs/index";
 import {
+  planIncomingMoves,
   renderDigest,
   renderFolder,
   renderNodeLine,
@@ -31,16 +32,19 @@ export interface MapToolsOptions {
   root: string;
   /** Supplies the current graph (cache-/memo-backed by the caller). */
   loadGraph: () => Promise<KbGraph>;
-  /** Expose write_node (create/update entries). Off by default. */
+  /** Expose write_node + organize_incoming (create/move entries). Off by default. */
   enableWrite?: boolean;
   /** Char budget for the injected/overview map (default 4000). */
   digestMaxChars?: number;
+  /** Inbox folder new captures land in and organize_incoming sorts (default "incoming"). */
+  incomingFolder?: string;
 }
 
 export function createMapTools(options: MapToolsOptions): Tool[] {
   const { root, loadGraph } = options;
   const fs = new ScopedFs(root);
   const digestMaxChars = options.digestMaxChars ?? 4_000;
+  const incomingFolder = options.incomingFolder ?? "incoming";
 
   const tools: Tool[] = [
     tool({
@@ -162,17 +166,30 @@ export function createMapTools(options: MapToolsOptions): Tool[] {
       tool({
         name: "write_node",
         description:
-          "Create or update a knowledge-base entry. Provide a path ending in " +
-          ".md and the full file contents — ideally with `name:` and " +
-          "`description:` frontmatter so it indexes cleanly into the map. The " +
+          "Save a note into the knowledge base. For a NEW capture, write it to " +
+          `\`${incomingFolder}/<kebab-name>.md\` (the inbox; organize_incoming sorts it later). ` +
+          "ALWAYS begin the file with YAML frontmatter and fill every field:\n" +
+          "---\n" +
+          "name: <kebab-slug matching the filename>\n" +
+          "description: <one concise sentence summarising the note>\n" +
+          "metadata:\n" +
+          "  type: <project | area | note | reference>\n" +
+          "tags: [<2-5 lowercase topic tags>]\n" +
+          "---\n" +
+          "Then a `# Title` and the body. Good name/description/type/tags are what " +
+          "let the note be sorted and found later, so do not leave them blank. The " +
           "map refreshes automatically on the next turn.",
         parameters: {
           path: z
             .string()
             .describe(
-              "Destination path relative to the KB root (e.g. 'notes/x.md').",
+              `Destination path relative to the KB root, ending in .md (e.g. '${incomingFolder}/my-note.md').`,
             ),
-          content: z.string().describe("Full file contents to write."),
+          content: z
+            .string()
+            .describe(
+              "Full file contents, starting with the YAML frontmatter block.",
+            ),
         },
         implementation: async ({ path, content }, { status, warn }) => {
           status(`Writing ${path}`);
@@ -187,6 +204,90 @@ export function createMapTools(options: MapToolsOptions): Tool[] {
             warn(`write_node failed: ${m}`);
             return `Error: ${m}`;
           }
+        },
+      }),
+      tool({
+        name: "organize_incoming",
+        description:
+          `Sort the \`${incomingFolder}/\` inbox into the knowledge base's folders using each ` +
+          "note's frontmatter type and tags (type: project → projects/, a 'reference' tag → " +
+          "references/, etc.). Call with apply=false (default) to PREVIEW the moves, then " +
+          "apply=true to perform them. Notes with no usable type/tag are left in the inbox.",
+        parameters: {
+          apply: z
+            .boolean()
+            .default(false)
+            .describe("false = preview the plan; true = perform the moves."),
+        },
+        implementation: async ({ apply }, { status, warn }) => {
+          status(
+            apply
+              ? `Organizing ${incomingFolder}/`
+              : `Previewing ${incomingFolder}/ sort`,
+          );
+          const graph = await loadGraph();
+          const plan = planIncomingMoves(graph, { incomingFolder });
+
+          // Reconcile the index-based plan with the disk: the planner only sees
+          // indexed text files, so a target that exists on disk but isn't indexed
+          // (a dotfile, or a file past the scan cap) would slip its conflict
+          // check. Re-check every target with fs.exists so the PREVIEW matches
+          // what apply will actually do — no preview/apply divergence.
+          const movable: typeof plan.moves = [];
+          for (const m of plan.moves) {
+            if (await fs.exists(m.to)) {
+              plan.conflicts.push({
+                from: m.from,
+                to: m.to,
+                reason: "target already exists",
+              });
+            } else {
+              movable.push(m);
+            }
+          }
+
+          if (movable.length === 0 && plan.conflicts.length === 0) {
+            return plan.unsorted.length > 0
+              ? `Nothing to sort: ${plan.unsorted.length} note(s) in ${incomingFolder}/ have no type/tag to route on.`
+              : `${incomingFolder}/ is empty — nothing to organize.`;
+          }
+
+          const lines: string[] = [];
+          if (!apply) {
+            lines.push(
+              `Planned moves (re-run organize_incoming with apply=true to perform):`,
+            );
+            for (const m of movable)
+              lines.push(`  ${m.from} → ${m.to}   (${m.reason})`);
+          } else {
+            let moved = 0;
+            for (const m of movable) {
+              try {
+                // Single-user, local-fs tool: we accept the tiny TOCTOU between
+                // the fs.exists check above and the rename. fs.move refuses to
+                // escape the root; a concurrent writer is out of scope here.
+                await fs.move(m.from, m.to);
+                moved++;
+              } catch (err) {
+                const e = msg(err);
+                warn(`move failed: ${e}`);
+                plan.conflicts.push({ from: m.from, to: m.to, reason: e });
+              }
+            }
+            lines.push(`Moved ${moved} note(s).`);
+          }
+
+          if (plan.conflicts.length > 0) {
+            lines.push(`Skipped (conflicts):`);
+            for (const c of plan.conflicts)
+              lines.push(`  ${c.from} → ${c.to}   (${c.reason})`);
+          }
+          if (plan.unsorted.length > 0) {
+            lines.push(
+              `Left in ${incomingFolder}/ (no type/tag): ${plan.unsorted.map((u) => u.path).join(", ")}`,
+            );
+          }
+          return lines.join("\n");
         },
       }),
     );

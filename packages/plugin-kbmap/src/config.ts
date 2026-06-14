@@ -21,6 +21,16 @@ export const globalConfigSchematics = createConfigSchematics()
     },
     ["archive"],
   )
+  .field(
+    "incomingFolder",
+    "string",
+    {
+      displayName: "Inbox folder",
+      hint: "Folder new captures (write_node) land in, and that organize_incoming sorts by type/tags. Relative to the knowledge directory.",
+      placeholder: "incoming",
+    },
+    "incoming",
+  )
   .build();
 
 export const chatConfigSchematics = createConfigSchematics()

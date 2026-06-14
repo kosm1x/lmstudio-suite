@@ -3,7 +3,7 @@
   "owner": "kosmix",
   "type": "plugin",
   "runner": "node",
-  "revision": 1,
+  "revision": 2,
   "tags": [
     "memory",
     "retrieval",
