@@ -15,18 +15,17 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities
 
-Four plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
-[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning).
-A fifth, **`kb-map`** (structural "map memory"), is built and bundle-ready but not yet published — package it with `npm run package:plugins`, then `lms push`.
+All five plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
+[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning).
 
-| Capability                        | Surface                          | Status                                 |
-| --------------------------------- | -------------------------------- | -------------------------------------- |
-| **Web search + fetch**            | Tools Provider                   | ✅ live — `web-tools` plugin + core    |
-| **Filesystem + code exec**        | Tools Provider                   | ✅ live — `local-tools` plugin + core  |
-| **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ live — `memory` plugin + core       |
-| **Map memory (KB navigation)**    | Preprocessor + Tools Provider    | ✅ built — `kb-map` plugin + `core/kb` |
-| **Structured output + reasoning** | Preprocessor + core helpers      | ✅ live — `reasoning` plugin + core    |
-| **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                 |
+| Capability                        | Surface                          | Status                                |
+| --------------------------------- | -------------------------------- | ------------------------------------- |
+| **Web search + fetch**            | Tools Provider                   | ✅ live — `web-tools` plugin + core   |
+| **Filesystem + code exec**        | Tools Provider                   | ✅ live — `local-tools` plugin + core |
+| **RAG / memory**                  | Prompt Preprocessor + embeddings | ✅ live — `memory` plugin + core      |
+| **Map memory (KB navigation)**    | Preprocessor + Tools Provider    | ✅ live — `kb-map` plugin + `core/kb` |
+| **Structured output + reasoning** | Preprocessor + core helpers      | ✅ live — `reasoning` plugin + core   |
+| **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                |
 
 ### Web search backends
 
