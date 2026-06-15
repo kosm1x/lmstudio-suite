@@ -42,6 +42,31 @@ The plugins import the unpublished workspace package `@lmstudio-suite/core`, so 
 - **A budget that isn't a hard bound silently bloats every-turn context.** First cut only triggered the "+N more" rollup _inside_ a folder's node loop, so the per-folder heading + first entry always emitted — a one-folder-per-note vault blew `maxChars` by up to ~38× (warm tier had no budget check at all). Fix: account headings + the warm section in the running total, gate rollup on the running total (not "have I shown ≥1 here"), and **reserve headroom so the trailing summary always fits** — otherwise you stay under budget but drop the "+N more" marker, i.e. silently truncate.
 - **Scope a read tool to the index, not just the root.** `read_node` originally read any file under the KB root via ScopedFs. ScopedFs blocks `..` traversal but not a `.env`/key that simply _sits_ in the root — `collectKbFiles` hides it from the map, but the model could still read it by path. Gate the read to entries present in the graph (membership check), and allowlist write extensions. The traversal guard and the visibility policy are two different controls.
 
+## Tool design — editing files & shared builders
+
+- **Put a capability in `core/tools` once; plugins and the CLI inherit it.** `edit_file` is a
+  single `tool()` builder inside `createFsTools`, so both the `local-tools` plugin and `agent-cli`
+  gained it with zero wiring. The roadmap invariant ("never implement a capability twice") is not
+  bureaucracy — it's what makes one commit ship a tool everywhere.
+- **A model-facing read and an edit read are different reads.** `ScopedFs.readFile` caps at 1MB to
+  protect context; a file-editing tool that reads through it and writes the result back **silently
+  truncates everything past the cap**. Edits must use a separate non-truncating read (`readFileFull`).
+  The >1MB regression test exists to keep that wired — if someone "simplifies" edit_file back onto the
+  capped read, an over-cap `old_string` reads as not-found and the test fails loudly.
+- **Mutating an existing file means writing atomically.** Truncate-in-place (`writeFile(path, …)`) is
+  fine for create/overwrite but for `edit_file` a crash mid-write loses _existing_ content. Stage to a
+  sibling temp file and `rename()` into place — atomic within a filesystem, and a same-dir temp is on
+  the same filesystem. (qa-auditor flagged this; we folded the fix in rather than queuing it, since
+  not-corrupting-files is the whole point of an edit tool.)
+- **Literal find/replace, not `String.prototype.replace`.** `String.replace(str, repl)` treats `$&`,
+  `$1`, `$\`` in the replacement as special — a model replacing code containing `$` gets corruption.
+  Use `indexOf` + slice/concat for the single case and `split(old).join(new)` for `replace_all`; both
+  are fully literal. Test it explicitly (`new_string: "$1$&"`).
+- **Make the unique-match contract the default and fail closed.** `edit_file` requires `old_string` to
+  match exactly once unless `replace_all`; not-found / ambiguous / empty / identical-old==new all
+  return an error **before any write**. A model that gets "matches 3 times, add context or set
+  replace_all" self-corrects; one that silently edited the first match would corrupt quietly.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).
