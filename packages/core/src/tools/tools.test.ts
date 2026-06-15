@@ -11,9 +11,14 @@ describe("shared tool builders", () => {
     expect(names(tools)).toEqual(["fetch_url", "web_search"]);
   });
 
-  it("createFsTools builds read/write/list", () => {
+  it("createFsTools builds read/write/edit/list", () => {
     const tools = createFsTools({ root: "/tmp" }) as Array<{ name: string }>;
-    expect(names(tools)).toEqual(["list_dir", "read_file", "write_file"]);
+    expect(names(tools)).toEqual([
+      "edit_file",
+      "list_dir",
+      "read_file",
+      "write_file",
+    ]);
   });
 
   it("createShellTool builds run_shell", () => {

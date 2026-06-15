@@ -57,6 +57,62 @@ export function createFsTools(options: FsToolsOptions): Tool[] {
       },
     }),
     tool({
+      name: "edit_file",
+      description:
+        "Make a surgical edit to an existing text file: replace an exact substring with new " +
+        "text, without rewriting the whole file. By default old_string must match EXACTLY " +
+        "ONCE — include enough surrounding context (indentation, adjacent lines) to make it " +
+        "unique. Set replace_all to change every occurrence (e.g. renaming a symbol). The " +
+        "edit fails WITHOUT writing if old_string is empty, missing, equal to new_string, or " +
+        "(when replace_all is off) ambiguous. Matching is literal — no regex, no $ escapes. " +
+        "Paths are relative to the working directory; '..' escapes are rejected.",
+      parameters: {
+        path: z.string().describe("Relative path of the file to edit."),
+        old_string: z
+          .string()
+          .describe(
+            "Exact text to find. Must match once unless replace_all is set.",
+          ),
+        new_string: z.string().describe("Text to replace it with."),
+        replace_all: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Replace every occurrence instead of requiring a unique match.",
+          ),
+      },
+      implementation: async (
+        { path, old_string, new_string, replace_all },
+        { status, warn },
+      ) => {
+        status(`Editing ${path}`);
+        try {
+          if (old_string === "") return "Error: old_string must not be empty.";
+          if (old_string === new_string)
+            return "Error: old_string and new_string are identical; nothing to change.";
+          const before = await fs.readFileFull(path);
+          const occurrences = before.split(old_string).length - 1;
+          if (occurrences === 0)
+            return `Error: old_string not found in ${path}.`;
+          if (occurrences > 1 && !replace_all)
+            return `Error: old_string matches ${occurrences} times in ${path}; add surrounding context to make it unique, or set replace_all.`;
+          const idx = before.indexOf(old_string);
+          const after = replace_all
+            ? before.split(old_string).join(new_string)
+            : before.slice(0, idx) +
+              new_string +
+              before.slice(idx + old_string.length);
+          await fs.writeFile(path, after);
+          const n = replace_all ? occurrences : 1;
+          return `Edited ${path}: replaced ${n} occurrence${n === 1 ? "" : "s"}. (${before.length} → ${after.length} chars)`;
+        } catch (err) {
+          const m = msg(err);
+          warn(`edit_file failed: ${m}`);
+          return `Error: ${m}`;
+        }
+      },
+    }),
+    tool({
       name: "list_dir",
       description:
         "List the files and subdirectories of a directory. Paths are relative to the working directory; use '.' for the root.",

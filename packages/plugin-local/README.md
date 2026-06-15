@@ -10,6 +10,7 @@ Part of [lmstudio-suite](https://github.com/kosm1x/lmstudio-suite).
 | ------------ | -------------------------------------------------------------------------------------- |
 | `read_file`  | Read a UTF-8 text file (paths relative to the working dir; `..` escapes rejected).     |
 | `write_file` | Create/overwrite a file, creating parent directories.                                  |
+| `edit_file`  | Surgical exact-string replace (unique match by default; `replace_all` for renames).    |
 | `list_dir`   | List files and subdirectories.                                                         |
 | `run_shell`  | Run a shell command and return exit code + stdout/stderr. **Opt-in** (off by default). |
 

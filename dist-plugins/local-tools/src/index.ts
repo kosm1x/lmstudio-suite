@@ -44,6 +44,7 @@ import { LMStudioClient } from "@lmstudio/sdk";
 
 // packages/core/src/fs/scoped-fs.ts
 import { promises as fsp } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 var PathEscapeError = class extends Error {
   constructor(p) {
@@ -82,11 +83,35 @@ var ScopedFs = class {
       await fh.close();
     }
   }
-  /** Write a file, creating parent directories as needed. */
+  /**
+   * Read the entire file with no truncation cap. Use for edit/transform
+   * operations, where writing back a model-facing (size-capped) read would
+   * silently drop everything past the cap. `readFile` is the capped read.
+   */
+  async readFileFull(relPath) {
+    return fsp.readFile(this.resolvePath(relPath), "utf-8");
+  }
+  /**
+   * Write a file, creating parent directories as needed.
+   *
+   * Atomic: the content is staged to a sibling temp file and renamed into
+   * place, so a crash mid-write leaves the temp file rather than a truncated
+   * original. (rename is atomic within a filesystem; the temp sits in the same
+   * directory as the target, hence the same filesystem.) This matters for
+   * `edit_file`, where a partial write would corrupt existing content.
+   */
   async writeFile(relPath, content) {
     const p = this.resolvePath(relPath);
     await fsp.mkdir(dirname(p), { recursive: true });
-    await fsp.writeFile(p, content, "utf-8");
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, content, "utf-8");
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
   }
   /** Move/rename a file within the root; both ends are traversal-guarded. */
   async move(fromRel, toRel) {
@@ -282,6 +307,43 @@ function createFsTools(options) {
         } catch (err) {
           const m = msg(err);
           warn(`write_file failed: ${m}`);
+          return `Error: ${m}`;
+        }
+      }
+    }),
+    tool2({
+      name: "edit_file",
+      description: "Make a surgical edit to an existing text file: replace an exact substring with new text, without rewriting the whole file. By default old_string must match EXACTLY ONCE \u2014 include enough surrounding context (indentation, adjacent lines) to make it unique. Set replace_all to change every occurrence (e.g. renaming a symbol). The edit fails WITHOUT writing if old_string is empty, missing, equal to new_string, or (when replace_all is off) ambiguous. Matching is literal \u2014 no regex, no $ escapes. Paths are relative to the working directory; '..' escapes are rejected.",
+      parameters: {
+        path: z2.string().describe("Relative path of the file to edit."),
+        old_string: z2.string().describe(
+          "Exact text to find. Must match once unless replace_all is set."
+        ),
+        new_string: z2.string().describe("Text to replace it with."),
+        replace_all: z2.boolean().default(false).describe(
+          "Replace every occurrence instead of requiring a unique match."
+        )
+      },
+      implementation: async ({ path, old_string, new_string, replace_all }, { status, warn }) => {
+        status(`Editing ${path}`);
+        try {
+          if (old_string === "") return "Error: old_string must not be empty.";
+          if (old_string === new_string)
+            return "Error: old_string and new_string are identical; nothing to change.";
+          const before = await fs.readFileFull(path);
+          const occurrences = before.split(old_string).length - 1;
+          if (occurrences === 0)
+            return `Error: old_string not found in ${path}.`;
+          if (occurrences > 1 && !replace_all)
+            return `Error: old_string matches ${occurrences} times in ${path}; add surrounding context to make it unique, or set replace_all.`;
+          const idx = before.indexOf(old_string);
+          const after = replace_all ? before.split(old_string).join(new_string) : before.slice(0, idx) + new_string + before.slice(idx + old_string.length);
+          await fs.writeFile(path, after);
+          const n = replace_all ? occurrences : 1;
+          return `Edited ${path}: replaced ${n} occurrence${n === 1 ? "" : "s"}. (${before.length} \u2192 ${after.length} chars)`;
+        } catch (err) {
+          const m = msg(err);
+          warn(`edit_file failed: ${m}`);
           return `Error: ${m}`;
         }
       }

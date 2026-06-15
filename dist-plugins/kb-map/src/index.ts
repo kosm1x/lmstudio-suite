@@ -5,6 +5,7 @@ import { LMStudioClient } from "@lmstudio/sdk";
 
 // packages/core/src/fs/scoped-fs.ts
 import { promises as fsp } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 var PathEscapeError = class extends Error {
   constructor(p) {
@@ -43,11 +44,35 @@ var ScopedFs = class {
       await fh.close();
     }
   }
-  /** Write a file, creating parent directories as needed. */
+  /**
+   * Read the entire file with no truncation cap. Use for edit/transform
+   * operations, where writing back a model-facing (size-capped) read would
+   * silently drop everything past the cap. `readFile` is the capped read.
+   */
+  async readFileFull(relPath) {
+    return fsp.readFile(this.resolvePath(relPath), "utf-8");
+  }
+  /**
+   * Write a file, creating parent directories as needed.
+   *
+   * Atomic: the content is staged to a sibling temp file and renamed into
+   * place, so a crash mid-write leaves the temp file rather than a truncated
+   * original. (rename is atomic within a filesystem; the temp sits in the same
+   * directory as the target, hence the same filesystem.) This matters for
+   * `edit_file`, where a partial write would corrupt existing content.
+   */
   async writeFile(relPath, content) {
     const p = this.resolvePath(relPath);
     await fsp.mkdir(dirname(p), { recursive: true });
-    await fsp.writeFile(p, content, "utf-8");
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, content, "utf-8");
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
   }
   /** Move/rename a file within the root; both ends are traversal-guarded. */
   async move(fromRel, toRel) {
