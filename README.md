@@ -15,11 +15,9 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities
 
-Five plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
-[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning).
-Three more are built and bundle-ready, pending a `lms push`: **`data-tools`**, **`toolkit`** (the whole suite in one install), and **`calc-generator`** (a Generator example). The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all phases complete.
-
-> **Note on Hub state:** `web-tools`, `local-tools`, and `memory` gained new tools/config in the roadmap work (web → `http_request`/`download`/`crawl`; local → `edit`/`search`/`glob`/file-ops + shell policy; memory → `remember`/`recall`/`forget`). Re-push them to refresh the published revision.
+All eight plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
+[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning) · [`data-tools`](https://lmstudio.ai/kosmix/data-tools) · [`toolkit`](https://lmstudio.ai/kosmix/toolkit) (the whole suite in one install) · [`calc-generator`](https://lmstudio.ai/kosmix/calc-generator) (a Generator example).
+The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all phases complete.
 
 | Capability                        | Surface                       | Status                                                                         |
 | --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
@@ -27,11 +25,31 @@ Three more are built and bundle-ready, pending a `lms push`: **`data-tools`**, *
 | **Filesystem + code exec**        | Tools Provider                | ✅ live — `local-tools` plugin + core                                          |
 | **RAG / memory (read + write)**   | Preprocessor + Tools Provider | ✅ live — `memory` plugin + core (remember/recall/forget)                      |
 | **Map memory (KB navigation)**    | Preprocessor + Tools Provider | ✅ live — `kb-map` plugin + `core/kb`                                          |
-| **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ built — `data-tools` plugin + `core/data` (publish pending)                 |
+| **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ live — `data-tools` plugin + `core/data`                                    |
 | **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                                            |
 | **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                                         |
 
-Planned work — a phased plan to grow this into a full tool suite (surgical file editing, content search, data/SQL/HTTP tools, writable memory, an eval harness) lives in **[docs/ROADMAP.md](docs/ROADMAP.md)**.
+The phased plan that grew this into a full tool suite (surgical file editing, content search, data/SQL/HTTP tools, writable memory, an eval harness) is in **[docs/ROADMAP.md](docs/ROADMAP.md)** — all phases complete.
+
+### Toolkit vs. individual plugins — which to install
+
+`toolkit` bundles every **tool** group (web · http · filesystem · shell · data · memory · kb-map) behind per-chat toggles, so it can stand in for the plugins that _only_ provide tools. It **cannot** replace the plugins that hook a different part of the SDK lifecycle — prompt preprocessors and the generator — because a Tools Provider has no way to inject those behaviors.
+
+| Plugin           | SDK hook             | With `toolkit` installed                                                                             |
+| ---------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `web-tools`      | Tools Provider only  | Redundant — covered by toolkit's `web` / `http` groups                                               |
+| `local-tools`    | Tools Provider only  | Redundant — covered by toolkit's `filesystem` / `shell` groups                                       |
+| `data-tools`     | Tools Provider only  | Redundant — covered by toolkit's `data` group                                                        |
+| `reasoning`      | Prompt Preprocessor  | **Keep** — injects CoT scaffolding; toolkit has no preprocessor                                      |
+| `calc-generator` | Generator            | **Keep** — replaces the token source; a different hook entirely                                      |
+| `memory`         | Preprocessor + Tools | **Keep** — toolkit exposes its `remember`/`recall`/`forget` tools but **not** the auto-RAG injection |
+| `kb-map`         | Preprocessor + Tools | **Keep** — toolkit exposes its nav tools but **not** the always-on KB digest injection               |
+
+**Recommended setup:** install `toolkit` for tools, plus `reasoning`, `memory`, and `kb-map` for their preprocessor behavior (and `calc-generator` if you want the Generator example). You can drop the standalone `web-tools` / `local-tools` / `data-tools`.
+
+> ⚠️ If you run `toolkit` **and** standalone `memory` / `kb-map`, **disable toolkit's `memory` and `kb-map` groups** — otherwise those tools load twice and the model sees duplicate tool names.
+>
+> For a weak local model, a single focused plugin can beat toolkit-with-everything-on (fewer tool schemas in context → less tool confusion). Use toolkit's group toggles to keep the active set small.
 
 ### Web search backends
 
@@ -91,7 +109,7 @@ The plugins import the shared workspace package `@lmstudio-suite/core`, which is
 ```bash
 npm run package:plugins        # owner comes from each manifest (kosmix)
 # or override: npm run package:plugins -- --owner <your-lms-hub-handle>
-# → dist-plugins/{web-tools,local-tools,memory,reasoning}/
+# → dist-plugins/{web-tools,local-tools,memory,kb-map,reasoning,data-tools,toolkit,calc-generator}/
 #   each: manifest.json · package.json (lms-plugin-<name>) · package-lock.json ·
 #         tsconfig.json · src/index.ts  (self-contained bundle)
 
@@ -99,7 +117,7 @@ cd dist-plugins/web-tools
 lms push        # publishes to the LM Studio Hub (run `lms login` first)
 ```
 
-How it works: each plugin's entry is esbuild-bundled with `@lmstudio-suite/core` **inlined** (tree-shaken to only what that plugin uses; the HTML parser is inlined into `web-tools`), while `@lmstudio/sdk` and `zod` stay **external** — both are provided by the plugin runtime, and zod must be the _same instance_ the SDK uses for `tool()` schema extraction (hence the v3 pin). The generated `package-lock.json` resolves `zod@3.x` + `@lmstudio/sdk@1.5.0`. `dist-plugins/` is git-ignored — regenerate it whenever `core` or a plugin changes.
+How it works: each plugin's entry is esbuild-bundled with `@lmstudio-suite/core` **inlined** (tree-shaken to only what that plugin uses; the HTML parser is inlined into `web-tools`), while `@lmstudio/sdk` and `zod` stay **external** — both are provided by the plugin runtime, and zod must be the _same instance_ the SDK uses for `tool()` schema extraction (hence the v3 pin). The generated `package-lock.json` resolves `zod@3.x` + `@lmstudio/sdk@1.5.0`. `dist-plugins/` is git-ignored but the built bundles are **force-committed** (`git add -f`) so other machines get them via `git pull` and can `lms push` without a local rebuild — regenerate it whenever `core` or a plugin changes.
 
 > Manifests use the LM Studio Hub handle `kosmix` (the GitHub repo is `kosm1x/lmstudio-suite` — these are different handles). Override with `--owner <handle>` if publishing under a different account. For local iteration without publishing, `lms dev` from a `packages/plugin-*` folder works directly against the monorepo.
 

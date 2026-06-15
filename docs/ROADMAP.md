@@ -1,9 +1,10 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
-> **Status: ✅ ALL PHASES COMPLETE.** Phases 1–5 shipped on `phase1-tooling`
-> (typecheck clean, full suite green, 8 plugins bundle). `data-tools`, `toolkit`,
-> and `calc-generator` are new and pending a `lms push`; `web-tools` / `local-tools`
-> / `memory` gained tools/config and want a re-push.
+> **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
+> merged to `main` (PR #2, merge `7410bfc`; typecheck clean, 250 tests green, 8 plugins
+> bundle). All **eight** plugins are live on the LM Studio Hub under
+> [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
+> `kb-map` · `reasoning` · `data-tools` · `toolkit` · `calc-generator`.
 
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the
