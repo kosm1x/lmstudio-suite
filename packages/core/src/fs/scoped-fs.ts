@@ -111,6 +111,20 @@ export class ScopedFs {
     }
   }
 
+  /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
+  async writeBytes(relPath: string, data: Uint8Array): Promise<void> {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, data);
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
+  }
+
   /** Move/rename a file within the root; both ends are traversal-guarded. */
   async move(fromRel: string, toRel: string): Promise<void> {
     const from = this.resolvePath(fromRel);

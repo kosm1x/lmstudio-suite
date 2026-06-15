@@ -10,6 +10,7 @@ import {
   createClient,
   createDataTools,
   createFsTools,
+  createHttpTools,
   createMapTools,
   createMemoryTools,
   createShellTool,
@@ -42,6 +43,7 @@ async function run(): Promise<void> {
   );
   const tools: Tool[] = [
     ...createWebTools({ search, allowPrivateHosts }),
+    ...createHttpTools({ root: args.cwd, allowPrivateHosts }),
     ...createFsTools({ root: args.cwd }),
   ];
   if (args.shell) tools.push(createShellTool({ cwd: args.cwd }));

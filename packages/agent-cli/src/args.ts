@@ -87,7 +87,8 @@ Environment (web search):
   SEARCH_API_KEY   API key for tavily/brave
   SEARXNG_URL      Base URL for a self-hosted SearXNG instance
 
-The agent always has: web_search, fetch_url, read_file, write_file, list_dir.
+The agent always has: web_search, fetch_url, http_request, download_file, crawl,
+and the filesystem tools (read/write/edit/search/glob/list/stat/move/mkdir/delete).
 With --shell it also gets run_shell (commands run with your privileges).
 With --kb it also gets map_overview, search_map, read_node, follow_links over
 that knowledge base.`;

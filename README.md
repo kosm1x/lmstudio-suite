@@ -18,15 +18,15 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 All five plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
 [`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning).
 
-| Capability                        | Surface                       | Status                                                         |
-| --------------------------------- | ----------------------------- | -------------------------------------------------------------- |
-| **Web search + fetch**            | Tools Provider                | ✅ live — `web-tools` plugin + core                            |
-| **Filesystem + code exec**        | Tools Provider                | ✅ live — `local-tools` plugin + core                          |
-| **RAG / memory (read + write)**   | Preprocessor + Tools Provider | ✅ live — `memory` plugin + core (remember/recall/forget)      |
-| **Map memory (KB navigation)**    | Preprocessor + Tools Provider | ✅ live — `kb-map` plugin + `core/kb`                          |
-| **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ built — `data-tools` plugin + `core/data` (publish pending) |
-| **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                            |
-| **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                         |
+| Capability                        | Surface                       | Status                                                                         |
+| --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
+| **Web: search + fetch + HTTP**    | Tools Provider                | ✅ live — `web-tools` plugin + core (search/fetch/http_request/download/crawl) |
+| **Filesystem + code exec**        | Tools Provider                | ✅ live — `local-tools` plugin + core                                          |
+| **RAG / memory (read + write)**   | Preprocessor + Tools Provider | ✅ live — `memory` plugin + core (remember/recall/forget)                      |
+| **Map memory (KB navigation)**    | Preprocessor + Tools Provider | ✅ live — `kb-map` plugin + `core/kb`                                          |
+| **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ built — `data-tools` plugin + `core/data` (publish pending)                 |
+| **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                                            |
+| **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                                         |
 
 Planned work — a phased plan to grow this into a full tool suite (surgical file editing, content search, data/SQL/HTTP tools, writable memory, an eval harness) lives in **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 
@@ -55,7 +55,7 @@ lmstudio-suite/
 │   │       ├── kb/           frontmatter + [[links]] graph + map digest ✅
 │   │       ├── data/         calculator + csv + jsonpath + sql-readonly  ✅
 │   │       └── tools/        shared SDK tool() builders (web/fs/shell/map/data) ✅
-│   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url)
+│   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url + http_request/download/crawl)
 │   ├── plugin-local/         ✅ Tools Provider (read/write/edit/search/glob/file-ops + opt-in run_shell)
 │   ├── plugin-memory/        ✅ Preprocessor (RAG) + opt-in write tools (remember/recall/forget)
 │   ├── plugin-kbmap/         ✅ Preprocessor + Tools Provider (map memory over a KB)

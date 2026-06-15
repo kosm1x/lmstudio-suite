@@ -82,4 +82,14 @@ export const chatConfigSchematics = createConfigSchematics()
     },
     8_000,
   )
+  .field(
+    "downloadDir",
+    "string",
+    {
+      displayName: "Download directory",
+      hint: "Absolute path that download_file saves into (supports a leading ~). Leave blank to use a temp sandbox. Paths are relative to this and '..' escapes are rejected.",
+      placeholder: "~/Downloads",
+    },
+    "",
+  )
   .build();

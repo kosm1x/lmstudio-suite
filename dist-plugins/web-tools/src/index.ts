@@ -2552,10 +2552,10 @@ var require_helpers = __commonJS({
         return !arr.includes(node, i + 1);
       });
       nodes.sort(function(a, b) {
-        var relative = compareDocumentPosition(a, b);
-        if (relative & DocumentPosition.PRECEDING) {
+        var relative2 = compareDocumentPosition(a, b);
+        if (relative2 & DocumentPosition.PRECEDING) {
           return -1;
-        } else if (relative & DocumentPosition.FOLLOWING) {
+        } else if (relative2 & DocumentPosition.FOLLOWING) {
           return 1;
         }
         return 0;
@@ -6044,10 +6044,22 @@ var chatConfigSchematics = createConfigSchematics().field(
     max: 5e4
   },
   8e3
+).field(
+  "downloadDir",
+  "string",
+  {
+    displayName: "Download directory",
+    hint: "Absolute path that download_file saves into (supports a leading ~). Leave blank to use a temp sandbox. Paths are relative to this and '..' escapes are rejected.",
+    placeholder: "~/Downloads"
+  },
+  ""
 ).build();
 
 // packages/plugin-web/src/tools.ts
 import "@lmstudio/sdk";
+import { mkdir } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve as resolve2 } from "node:path";
 
 // packages/core/src/client.ts
 import { LMStudioClient } from "@lmstudio/sdk";
@@ -6359,6 +6371,52 @@ function extractTitle(html) {
   return decodeEntities(title);
 }
 
+// packages/core/src/web/guarded-fetch.ts
+async function guardedFetch(url, init = {}, options = {}) {
+  const {
+    allowPrivateHosts = false,
+    maxRedirects = 5,
+    timeoutMs,
+    signal,
+    userAgent = DEFAULT_UA
+  } = options;
+  const guardHost = (u) => {
+    if (!allowPrivateHosts && isPrivateHost(u.hostname)) {
+      throw new Error(
+        `Refusing to reach a private/loopback host (${u.hostname}). Set allowPrivateHosts to override.`
+      );
+    }
+  };
+  let current = url;
+  let currentInit = init;
+  let hops = 0;
+  for (; ; ) {
+    guardHost(parseHttpUrl(current));
+    const res = await fetchWithTimeout(
+      current,
+      {
+        ...currentInit,
+        redirect: "manual",
+        headers: { "user-agent": userAgent, ...currentInit.headers }
+      },
+      { timeoutMs, signal }
+    );
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) {
+      if (++hops > maxRedirects)
+        throw new Error(`Too many redirects for ${url}`);
+      current = new URL(location, current).toString();
+      if (res.status === 301 || res.status === 302 || res.status === 303) {
+        currentInit = { ...currentInit, method: "GET", body: void 0 };
+      }
+      await res.body?.cancel().catch(() => {
+      });
+      continue;
+    }
+    return { response: res, finalUrl: current };
+  }
+}
+
 // packages/core/src/web/fetch.ts
 async function fetchPage(url, options = {}) {
   const {
@@ -6369,38 +6427,15 @@ async function fetchPage(url, options = {}) {
     allowPrivateHosts = false,
     maxRedirects = 5
   } = options;
-  const guardHost = (u) => {
-    if (!allowPrivateHosts && isPrivateHost(u.hostname)) {
-      throw new Error(
-        `Refusing to fetch a private/loopback host (${u.hostname}). Set allowPrivateHosts to override.`
-      );
-    }
-  };
-  let current = url;
-  let hops = 0;
-  let res;
-  for (; ; ) {
-    guardHost(parseHttpUrl(current));
-    res = await fetchWithTimeout(
-      current,
-      {
-        redirect: "manual",
-        headers: {
-          "user-agent": userAgent,
-          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5"
-        }
-      },
-      { timeoutMs, signal }
-    );
-    const location = res.headers.get("location");
-    if (res.status >= 300 && res.status < 400 && location) {
-      if (++hops > maxRedirects)
-        throw new Error(`Too many redirects fetching ${url}`);
-      current = new URL(location, current).toString();
-      continue;
-    }
-    break;
-  }
+  const { response: res, finalUrl: current } = await guardedFetch(
+    url,
+    {
+      headers: {
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5"
+      }
+    },
+    { allowPrivateHosts, maxRedirects, timeoutMs, signal, userAgent }
+  );
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText} fetching ${current}`);
   }
@@ -6538,6 +6573,168 @@ async function searchSearxng(query, baseUrl, options) {
   }));
 }
 
+// packages/core/src/fs/scoped-fs.ts
+import { promises as fsp } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+var DEFAULT_IGNORE_DIRS = /* @__PURE__ */ new Set([
+  ".git",
+  "node_modules"
+]);
+var PathEscapeError = class extends Error {
+  constructor(p) {
+    super(`Path escapes the allowed root directory: ${p}`);
+    this.name = "PathEscapeError";
+  }
+};
+var ScopedFs = class {
+  /** Absolute, resolved root directory. */
+  root;
+  maxReadBytes;
+  constructor(root, options = {}) {
+    this.root = resolve(root);
+    this.maxReadBytes = options.maxReadBytes ?? 1e6;
+  }
+  /** Resolve a relative path within the root, throwing if it would escape. */
+  resolvePath(relPath) {
+    const target = resolve(this.root, relPath);
+    const rel = relative(this.root, target);
+    if (rel === "") return target;
+    if (rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel)) {
+      throw new PathEscapeError(relPath);
+    }
+    return target;
+  }
+  async readFile(relPath) {
+    const p = this.resolvePath(relPath);
+    const stat = await fsp.stat(p);
+    if (stat.size <= this.maxReadBytes) return fsp.readFile(p, "utf-8");
+    const fh = await fsp.open(p, "r");
+    try {
+      const buf = Buffer.alloc(this.maxReadBytes);
+      const { bytesRead } = await fh.read(buf, 0, this.maxReadBytes, 0);
+      return buf.subarray(0, bytesRead).toString("utf-8") + "\n\u2026[truncated]";
+    } finally {
+      await fh.close();
+    }
+  }
+  /**
+   * Read the entire file with no truncation cap. Use for edit/transform
+   * operations, where writing back a model-facing (size-capped) read would
+   * silently drop everything past the cap. `readFile` is the capped read.
+   */
+  async readFileFull(relPath) {
+    return fsp.readFile(this.resolvePath(relPath), "utf-8");
+  }
+  /**
+   * Write a file, creating parent directories as needed.
+   *
+   * Atomic: the content is staged to a sibling temp file and renamed into
+   * place, so a crash mid-write leaves the temp file rather than a truncated
+   * original. (rename is atomic within a filesystem; the temp sits in the same
+   * directory as the target, hence the same filesystem.) This matters for
+   * `edit_file`, where a partial write would corrupt existing content.
+   */
+  async writeFile(relPath, content) {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, content, "utf-8");
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
+  }
+  /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
+  async writeBytes(relPath, data) {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, data);
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
+  }
+  /** Move/rename a file within the root; both ends are traversal-guarded. */
+  async move(fromRel, toRel) {
+    const from = this.resolvePath(fromRel);
+    const to = this.resolvePath(toRel);
+    await fsp.mkdir(dirname(to), { recursive: true });
+    await fsp.rename(from, to);
+  }
+  async list(relPath = ".") {
+    const p = this.resolvePath(relPath);
+    const entries = await fsp.readdir(p, { withFileTypes: true });
+    return entries.map(
+      (e) => ({
+        name: e.name,
+        type: e.isDirectory() ? "dir" : e.isFile() ? "file" : "other"
+      })
+    ).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async exists(relPath) {
+    try {
+      await fsp.stat(this.resolvePath(relPath));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  /** Type + size + mtime for a path. Throws (ENOENT) if it does not exist. */
+  async stat(relPath) {
+    const s = await fsp.stat(this.resolvePath(relPath));
+    return {
+      type: s.isDirectory() ? "dir" : s.isFile() ? "file" : "other",
+      size: s.size,
+      mtimeMs: s.mtimeMs
+    };
+  }
+  /**
+   * Recursively yield file paths (relative to root, POSIX-separated `/`) under
+   * `relPath`. Yields files only; directories whose name is in `ignore` are
+   * pruned. Symlinks are not followed, and unreadable directories are skipped
+   * rather than throwing. Iteration order is unspecified — sort if you need it.
+   */
+  async *walk(relPath = ".", options = {}) {
+    const ignore = options.ignore ?? DEFAULT_IGNORE_DIRS;
+    const stack = [this.resolvePath(relPath)];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      let entries;
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        const abs = resolve(dir, e.name);
+        if (e.isDirectory()) {
+          if (!ignore.has(e.name)) stack.push(abs);
+        } else if (e.isFile()) {
+          yield relative(this.root, abs).split(sep).join("/");
+        }
+      }
+    }
+  }
+  async mkdir(relPath) {
+    await fsp.mkdir(this.resolvePath(relPath), { recursive: true });
+  }
+  /** Remove a file or directory. Refuses to remove the root itself. */
+  async remove(relPath) {
+    const p = this.resolvePath(relPath);
+    if (p === this.root)
+      throw new Error("Refusing to remove the root directory.");
+    await fsp.rm(p, { recursive: true, force: true });
+  }
+};
+
 // packages/core/src/tools/web-tools.ts
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
@@ -6599,19 +6796,234 @@ ${page.markdown}`;
   return [webSearchTool, fetchUrlTool];
 }
 
-// packages/core/src/tools/local-tools.ts
+// packages/core/src/tools/http-tools.ts
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
+var msg = (err) => err instanceof Error ? err.message : String(err);
+var HTTP_MAX_BYTES = 2e6;
+var DOWNLOAD_MAX_BYTES = 25e6;
+var CRAWL_MAX_PAGES = 20;
+var CRAWL_MAX_DEPTH = 3;
+var CRAWL_PER_PAGE_CHARS = 4e3;
+async function readCapped(res, maxBytes) {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return {
+      bytes: buf.subarray(0, maxBytes),
+      truncated: buf.length > maxBytes
+    };
+  }
+  const chunks = [];
+  let total = 0;
+  let truncated = false;
+  for (; ; ) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      total += value.length;
+      if (total >= maxBytes) {
+        truncated = true;
+        break;
+      }
+    }
+  }
+  await reader.cancel().catch(() => {
+  });
+  const out = new Uint8Array(Math.min(total, maxBytes));
+  let off = 0;
+  for (const c of chunks) {
+    if (off >= out.length) break;
+    const slice = c.subarray(0, out.length - off);
+    out.set(slice, off);
+    off += slice.length;
+  }
+  return { bytes: out, truncated };
+}
+function sameOriginLinks(html, baseUrl) {
+  const base = new URL(baseUrl);
+  const out = /* @__PURE__ */ new Set();
+  for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) {
+    const href = m[1];
+    if (/^(mailto:|javascript:|#|tel:|data:)/i.test(href)) continue;
+    try {
+      const u = new URL(href, baseUrl);
+      if (u.protocol !== "http:" && u.protocol !== "https:") continue;
+      if (u.host !== base.host) continue;
+      u.hash = "";
+      out.add(u.toString());
+    } catch {
+    }
+  }
+  return [...out];
+}
+function createHttpTools(options) {
+  const fs = new ScopedFs(options.root);
+  const allowPrivateHosts = options.allowPrivateHosts ?? false;
+  return [
+    tool2({
+      name: "http_request",
+      description: "Make an HTTP request to a REST API and return the status, key response headers, and the body (text/JSON, byte-capped). Supports GET/POST/PUT/PATCH/DELETE with custom headers and a request body. Private/loopback hosts are blocked by default (SSRF). Use for APIs; use fetch_url for reading web pages as Markdown.",
+      parameters: {
+        url: z2.string().describe("Absolute http(s) URL."),
+        method: z2.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]).default("GET").describe("HTTP method (default GET)."),
+        headers: z2.record(z2.string(), z2.string()).optional().describe("Request headers as a JSON object."),
+        body: z2.string().optional().describe("Request body (for POST/PUT/PATCH).")
+      },
+      implementation: async ({ url, method, headers, body }, { status, warn }) => {
+        status(`${method} ${url}`);
+        try {
+          const { response, finalUrl } = await guardedFetch(
+            url,
+            {
+              method,
+              headers,
+              body: method === "GET" || method === "HEAD" ? void 0 : body
+            },
+            { allowPrivateHosts }
+          );
+          const { bytes, truncated } = await readCapped(
+            response,
+            HTTP_MAX_BYTES
+          );
+          const text = Buffer.from(bytes).toString("utf8");
+          const ctype = response.headers.get("content-type") ?? "";
+          const head = `HTTP ${response.status} ${response.statusText}${finalUrl !== url ? ` (\u2192 ${finalUrl})` : ""}
+content-type: ${ctype}`;
+          const shown = text || "(empty body)";
+          return `${head}
 
-// packages/core/src/tools/map-tools.ts
+${shown}${truncated ? "\n\u2026[body truncated]" : ""}`;
+        } catch (err) {
+          warn(`http_request failed: ${msg(err)}`);
+          return `Error: ${msg(err)}`;
+        }
+      }
+    }),
+    tool2({
+      name: "download_file",
+      description: "Download a file from an http(s) URL into the working directory (path is relative; '..' escapes rejected). Size-capped; private/loopback hosts blocked by default. Returns the saved path, size, and content-type.",
+      parameters: {
+        url: z2.string().describe("Absolute http(s) URL to download."),
+        path: z2.string().describe("Relative destination path to save to.")
+      },
+      implementation: async ({ url, path }, { status, warn }) => {
+        status(`Downloading ${url}`);
+        try {
+          fs.resolvePath(path);
+          const { response } = await guardedFetch(
+            url,
+            {},
+            { allowPrivateHosts }
+          );
+          if (!response.ok) {
+            return `Error: HTTP ${response.status} ${response.statusText} for ${url}`;
+          }
+          const { bytes } = await readCapped(response, DOWNLOAD_MAX_BYTES + 1);
+          if (bytes.length > DOWNLOAD_MAX_BYTES) {
+            return `Error: ${url} exceeds the ${DOWNLOAD_MAX_BYTES}-byte download cap.`;
+          }
+          await fs.writeBytes(path, bytes);
+          const ctype = response.headers.get("content-type") ?? "unknown";
+          return `Saved ${bytes.length} bytes to ${path} (content-type: ${ctype}).`;
+        } catch (err) {
+          warn(`download_file failed: ${msg(err)}`);
+          return `Error: ${msg(err)}`;
+        }
+      }
+    }),
+    tool2({
+      name: "crawl",
+      description: "Crawl a website starting from a URL, following SAME-ORIGIN links breadth-first up to a page and depth limit, and return each page as Markdown. Hard-bounded (no runaway crawls). Use to read a small doc site or section; use fetch_url for one page.",
+      parameters: {
+        url: z2.string().describe("Absolute http(s) start URL."),
+        max_pages: z2.number().default(5).describe(`Max pages to fetch (cap ${CRAWL_MAX_PAGES}).`),
+        max_depth: z2.number().default(2).describe(`Max link depth from the start (cap ${CRAWL_MAX_DEPTH}).`)
+      },
+      implementation: async ({ url, max_pages, max_depth }, { status, warn }) => {
+        const pageCap = Math.min(Math.max(1, max_pages), CRAWL_MAX_PAGES);
+        const depthCap = Math.min(Math.max(0, max_depth), CRAWL_MAX_DEPTH);
+        const visited = /* @__PURE__ */ new Set();
+        const queue = [
+          { url, depth: 0 }
+        ];
+        const sections = [];
+        try {
+          while (queue.length > 0 && sections.length < pageCap) {
+            const { url: cur, depth } = queue.shift();
+            if (visited.has(cur)) continue;
+            visited.add(cur);
+            status(`Crawling ${cur} (${sections.length + 1}/${pageCap})`);
+            let html;
+            let finalUrl;
+            try {
+              const r = await guardedFetch(cur, {}, { allowPrivateHosts });
+              if (!r.response.ok) continue;
+              finalUrl = r.finalUrl;
+              const { bytes } = await readCapped(r.response, HTTP_MAX_BYTES);
+              html = Buffer.from(bytes).toString("utf8");
+            } catch {
+              continue;
+            }
+            const title = extractTitle(html) || finalUrl;
+            const md = htmlToMarkdown(html).slice(0, CRAWL_PER_PAGE_CHARS);
+            sections.push(`## ${title}
+<${finalUrl}>
+
+${md}`);
+            if (depth < depthCap) {
+              for (const link of sameOriginLinks(html, finalUrl)) {
+                if (!visited.has(link))
+                  queue.push({ url: link, depth: depth + 1 });
+              }
+            }
+          }
+          if (sections.length === 0)
+            return `Crawl of ${url} returned no pages.`;
+          return sections.join("\n\n---\n\n");
+        } catch (err) {
+          warn(`crawl failed: ${msg(err)}`);
+          return `Error: ${msg(err)}`;
+        }
+      }
+    })
+  ];
+}
+
+// packages/core/src/tools/local-tools.ts
 import { tool as tool3 } from "@lmstudio/sdk";
 import { z as z3 } from "zod";
 
+// packages/core/src/tools/map-tools.ts
+import { tool as tool4 } from "@lmstudio/sdk";
+import { z as z4 } from "zod";
+
+// packages/core/src/tools/data-tools.ts
+import { tool as tool5 } from "@lmstudio/sdk";
+import { z as z5 } from "zod";
+
+// packages/core/src/tools/memory-tools.ts
+import { tool as tool6 } from "@lmstudio/sdk";
+import { z as z6 } from "zod";
+
 // packages/plugin-web/src/tools.ts
+async function resolveDownloadDir(configured) {
+  const dir = (configured ?? "").trim();
+  if (dir) {
+    const expanded = dir === "~" || dir.startsWith("~/") ? join(homedir(), dir.slice(1)) : dir;
+    return resolve2(expanded);
+  }
+  const fallback = join(tmpdir(), "lmstudio-web-downloads");
+  await mkdir(fallback, { recursive: true }).catch(() => {
+  });
+  return fallback;
+}
 async function toolsProvider(ctl) {
   const global2 = ctl.getGlobalPluginConfig(globalConfigSchematics);
   const chat = ctl.getPluginConfig(chatConfigSchematics);
-  return createWebTools({
+  const allowPrivateHosts = global2.get("allowPrivateHosts");
+  const webTools = createWebTools({
     search: {
       provider: global2.get("searchProvider"),
       apiKey: global2.get("searchApiKey") || void 0,
@@ -6619,8 +7031,13 @@ async function toolsProvider(ctl) {
     },
     maxResults: chat.get("maxResults"),
     fetchMaxChars: chat.get("fetchMaxChars"),
-    allowPrivateHosts: global2.get("allowPrivateHosts")
+    allowPrivateHosts
   });
+  const httpTools = createHttpTools({
+    root: await resolveDownloadDir(chat.get("downloadDir")),
+    allowPrivateHosts
+  });
+  return [...webTools, ...httpTools];
 }
 
 // packages/plugin-web/src/index.ts

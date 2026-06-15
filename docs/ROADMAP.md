@@ -125,20 +125,20 @@ Deterministic data + math so the model stops doing it in its head.
 
 ---
 
-## Phase 3 — `http-tools` + richer web
+## Phase 3 — `http-tools` + richer web ✅ DONE
 
-### 3.1 `http_request`
+### 3.1 `http_request` ✅ DONE
 
 - **Files:** `core/src/tools/web-tools.ts` (+ test) or a new `http-tools.ts`.
 - Generic GET/POST/PUT/DELETE with headers + body, through `core/web/http.ts`, reusing the
   **audited SSRF host guard** (`allowPrivateHosts` default false; re-validate redirects;
   test via `new URL().hostname` per LEARNINGS). Cap response bytes.
 
-### 3.2 `download_file`
+### 3.2 `download_file` ✅ DONE
 
 - Fetch a URL into the scoped working dir (size cap, content-type note). Reuse the guard.
 
-### 3.3 `crawl`
+### 3.3 `crawl` ✅ DONE
 
 - Bounded same-origin fetch (depth + page cap) feeding existing `html-to-markdown`.
   Hard limits enforced; no unbounded BFS.
