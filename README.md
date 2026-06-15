@@ -54,14 +54,15 @@ lmstudio-suite/
 │   │       ├── reasoning/    extractJson + generateStructured + CoT ✅
 │   │       ├── kb/           frontmatter + [[links]] graph + map digest ✅
 │   │       ├── data/         calculator + csv + jsonpath + sql-readonly  ✅
-│   │       └── tools/        shared SDK tool() builders (web/fs/shell/map/data) ✅
+│   │       └── tools/        shared SDK tool() builders + http + memory + decorators ✅
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url + http_request/download/crawl)
 │   ├── plugin-local/         ✅ Tools Provider (read/write/edit/search/glob/file-ops + opt-in run_shell)
 │   ├── plugin-memory/        ✅ Preprocessor (RAG) + opt-in write tools (remember/recall/forget)
 │   ├── plugin-kbmap/         ✅ Preprocessor + Tools Provider (map memory over a KB)
 │   ├── plugin-reasoning/     ✅ Prompt Preprocessor (chain-of-thought scaffolding)
 │   ├── plugin-data/          ✅ Tools Provider (calculator + json/csv readers + read-only sqlite)
-│   └── agent-cli/            ✅ Standalone .act() agent composing all suite tools
+│   ├── plugin-toolkit/       ✅ Meta-plugin (all groups via per-chat toggles)
+│   └── agent-cli/            ✅ Standalone .act() agent (composes all tools; --approve / --trace)
 └──
 ```
 

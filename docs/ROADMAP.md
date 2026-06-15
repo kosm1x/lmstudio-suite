@@ -170,13 +170,13 @@ write path — the design completion noted in LEARNINGS.
 
 ## Phase 5 — Orchestration, safety & evaluation (the "suite" layer)
 
-### 5.1 `toolkit` meta-plugin
+### 5.1 `toolkit` meta-plugin ✅ DONE
 
 - **Files:** new `packages/plugin-toolkit/`.
 - One install exposing tool **groups** (web / fs / data / http) via config toggles, so
   users enable one plugin instead of five. Composes the same `core/tools` builders.
 
-### 5.2 Permission / approval layer
+### 5.2 Permission / approval layer ✅ DONE
 
 - A confirm-before-run gate for write/delete/shell/http. In-app: a config field
   (`require_approval`); CLI: interactive prompt + `--yes` to bypass. Threaded through the
@@ -194,7 +194,7 @@ write path — the design completion noted in LEARNINGS.
 - Deliver the README-promised `withGenerator` example (`packages/plugin-generator/` or a
   CLI demo) — currently listed but unbuilt.
 
-### 5.5 Observability
+### 5.5 Observability ✅ DONE
 
 - `agent-cli`: optional JSONL trace of every tool call (request args + result + round) for
   debugging agent loops. `--trace <file>`.
