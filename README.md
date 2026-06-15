@@ -27,6 +27,8 @@ All five plugins are **published to the LM Studio Hub** under [`kosmix`](https:/
 | **Structured output + reasoning** | Preprocessor + core helpers      | ✅ live — `reasoning` plugin + core   |
 | **Standalone agent CLI**          | SDK app (`.act()`)               | ✅ built — `agent-cli`                |
 
+Planned work — a phased plan to grow this into a full tool suite (surgical file editing, content search, data/SQL/HTTP tools, writable memory, an eval harness) lives in **[docs/ROADMAP.md](docs/ROADMAP.md)**.
+
 ### Web search backends
 
 `webSearch()` is provider-pluggable and works with **zero config** via DuckDuckGo (keyless HTML):
