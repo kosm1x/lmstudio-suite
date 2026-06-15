@@ -9,6 +9,8 @@ export interface CliArgs {
   shell: boolean;
   /** Knowledge-base directory for the map-memory tools (absolute). */
   kb?: string;
+  /** Directory for the writable memory tools remember/recall/forget (absolute). */
+  memory?: string;
   /** Expose the data tools (calculator / json / csv / sqlite). */
   data: boolean;
   help: boolean;
@@ -38,6 +40,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case "--kb":
         args.kb = resolve(argv[++i] ?? ".");
+        break;
+      case "--memory":
+        args.memory = resolve(argv[++i] ?? ".");
         break;
       case "--max-rounds":
         args.maxRounds = Math.max(1, Number(argv[++i] ?? "8") || 8);
@@ -73,6 +78,7 @@ Options:
       --max-rounds <n> Max agent prediction rounds (default: 8)
       --shell          Enable the run_shell tool (off by default)
       --kb <dir>       Knowledge-base dir to expose as map-memory tools
+      --memory <dir>   Dir for writable memory tools (remember / recall / forget)
       --data           Enable the data tools (calculator / json / csv / sqlite)
   -h, --help           Show this help
 

@@ -147,17 +147,17 @@ Deterministic data + math so the model stops doing it in its head.
 
 ---
 
-## Phase 4 — Writable memory (close the read-only loop)
+## Phase 4 — Writable memory (close the read-only loop) ✅ DONE
 
 `memory` and `kb-map` only read today. Give the model a write path.
 
-### 4.1 `remember` / `forget`
+### 4.1 `remember` / `forget` (+`recall`) ✅ DONE
 
 - **Files:** add tools alongside `plugin-memory` (or a shared `memory-tools.ts` in core).
 - `remember(text, tags?)` appends to the knowledge dir / re-indexes; `forget(id)` removes.
   Reuse `core/rag` indexer and `core/kb` writers.
 
-### 4.2 `store_note`
+### 4.2 `store_note` ✅ DONE (already shipped as kb-map `write_node`)
 
 - Write a frontmatter + `[[links]]` node into the kb-map graph (reuse `core/kb/frontmatter`
   - `links`). Respect the index-membership and write-extension allowlist guards from

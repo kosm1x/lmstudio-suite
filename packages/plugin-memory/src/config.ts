@@ -61,4 +61,13 @@ export const chatConfigSchematics = createConfigSchematics()
     },
     2_000,
   )
+  .field(
+    "enableWrite",
+    "boolean",
+    {
+      displayName: "Enable memory write tools",
+      hint: "Expose remember / recall / forget so the model can save facts to the knowledge directory (retrieved automatically on later messages). Off by default.",
+    },
+    false,
+  )
   .build();

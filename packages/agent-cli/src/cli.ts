@@ -11,6 +11,7 @@ import {
   createDataTools,
   createFsTools,
   createMapTools,
+  createMemoryTools,
   createShellTool,
   createWebTools,
   scanKbDir,
@@ -45,6 +46,7 @@ async function run(): Promise<void> {
   ];
   if (args.shell) tools.push(createShellTool({ cwd: args.cwd }));
   if (args.data) tools.push(...createDataTools({ root: args.cwd }));
+  if (args.memory) tools.push(...createMemoryTools({ root: args.memory }));
 
   if (args.kb) {
     const kbRoot = args.kb;
