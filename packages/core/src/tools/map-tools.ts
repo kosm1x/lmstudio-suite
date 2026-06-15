@@ -197,8 +197,10 @@ export function createMapTools(options: MapToolsOptions): Tool[] {
             return `Error: write_node only writes text notes (${[...WRITABLE_EXTENSIONS].join(", ")}); refusing "${path}".`;
           }
           try {
-            await fs.writeFile(path, content);
-            return `Wrote ${content.length} characters to ${path}.`;
+            const wrote = await fs.writeFileIfChanged(path, content);
+            return wrote
+              ? `Wrote ${content.length} characters to ${path}.`
+              : `No change: ${path} already contains exactly this content. The note is already saved (the map refreshes next turn) — do not write it again.`;
           } catch (err) {
             const m = msg(err);
             warn(`write_node failed: ${m}`);

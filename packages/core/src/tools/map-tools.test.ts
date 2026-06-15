@@ -118,6 +118,22 @@ describe("createMapTools", () => {
     );
   });
 
+  it("write_node reports a no-op when re-writing identical content", async () => {
+    const tools = make(true);
+    // Unique path — this test file shares one root across its tests.
+    const first = await call(tools, "write_node", {
+      path: "notes/idem.md",
+      content: "# idempotent",
+    });
+    expect(first).toMatch(/Wrote \d+ characters/);
+    const again = await call(tools, "write_node", {
+      path: "notes/idem.md",
+      content: "# idempotent",
+    });
+    expect(again).toMatch(/No change/);
+    expect(again).toMatch(/do not write it again/);
+  });
+
   it("write_node refuses non-text extensions", async () => {
     const out = await call(make(true), "write_node", {
       path: "evil.sh",

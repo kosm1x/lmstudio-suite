@@ -6652,6 +6652,20 @@ var ScopedFs = class {
       throw err;
     }
   }
+  /**
+   * Atomic write that skips the write entirely when the file already holds
+   * exactly `content`. Returns `true` if it wrote, `false` if the file was
+   * already identical. Compares against the FULL existing content (not the
+   * truncated read), so an over-cap but unchanged file is still detected as a
+   * no-op. Lets a write tool report "already saved" instead of redoing an
+   * expensive write — and gives a looping model a clear terminal signal.
+   */
+  async writeFileIfChanged(relPath, content) {
+    const existing = await this.readFileFull(relPath).catch(() => null);
+    if (existing === content) return false;
+    await this.writeFile(relPath, content);
+    return true;
+  }
   /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
   async writeBytes(relPath, data) {
     const p = this.resolvePath(relPath);
