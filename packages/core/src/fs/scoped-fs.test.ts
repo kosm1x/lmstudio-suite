@@ -56,6 +56,21 @@ describe("ScopedFs operations", () => {
     expect(out).toContain("truncated");
   });
 
+  it("writeFileIfChanged writes once, then no-ops on identical content", async () => {
+    expect(await fs.writeFileIfChanged("a.txt", "v1")).toBe(true); // created
+    expect(await fs.writeFileIfChanged("a.txt", "v1")).toBe(false); // unchanged
+    expect(await fs.writeFileIfChanged("a.txt", "v2")).toBe(true); // changed
+    expect(await fs.readFile("a.txt")).toBe("v2");
+  });
+
+  it("writeFileIfChanged compares the FULL file, not the truncated read", async () => {
+    // A file longer than the read cap that is unchanged must still no-op.
+    const small = new ScopedFs(dir, { maxReadBytes: 4 });
+    const big = "x".repeat(64);
+    expect(await small.writeFileIfChanged("big.txt", big)).toBe(true);
+    expect(await small.writeFileIfChanged("big.txt", big)).toBe(false);
+  });
+
   it("refuses to remove the root", async () => {
     await expect(fs.remove(".")).rejects.toThrow(/root directory/);
   });

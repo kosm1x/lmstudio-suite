@@ -56,13 +56,25 @@ export function createMemoryTools(options: MemoryToolsOptions): Tool[] {
   const subdir = (options.subdir ?? "memories").replace(/\/+$/, "");
   const rel = (id: string) => `${subdir}/${id}.md`;
 
-  /** Pick an unused id: the given id, else a slug, disambiguated with -2, -3… */
-  async function chooseId(text: string, given?: string): Promise<string> {
-    const base = given ? slugify(given) : slugify(text);
-    if (given) return base; // explicit id: overwrite-by-id is intentional
+  /**
+   * Resolve the note id to write to. An explicit `given` id overwrites that
+   * note. With no id, derive a slug; if a same-slug note already holds the same
+   * fact (body match), reuse ITS id so a re-issued "remember X" updates that
+   * note in place (e.g. new tags) instead of piling up note-2, note-3…
+   * duplicates. Genuinely-different facts that slugify the same still get -N.
+   * The actual "unchanged" no-op signal comes from writeFileIfChanged below.
+   */
+  async function resolveId(text: string, given?: string): Promise<string> {
+    if (given) return slugify(given);
+    const base = slugify(text);
+    const wanted = text.trim();
     let id = base;
     let n = 2;
-    while (await fs.exists(rel(id))) id = `${base}-${n++}`;
+    while (await fs.exists(rel(id))) {
+      const raw = await fs.readFileFull(rel(id)).catch(() => "");
+      if (raw && parseFrontmatter(raw).body.trim() === wanted) return id;
+      id = `${base}-${n++}`;
+    }
     return id;
   }
 
@@ -95,9 +107,14 @@ export function createMemoryTools(options: MemoryToolsOptions): Tool[] {
         status("remember");
         if (!text.trim()) return "Error: nothing to remember (empty text).";
         try {
-          const noteId = await chooseId(text, id);
-          await fs.writeFile(rel(noteId), buildNote(text, tags));
-          return `Remembered as "${noteId}".`;
+          const noteId = await resolveId(text, id);
+          const wrote = await fs.writeFileIfChanged(
+            rel(noteId),
+            buildNote(text, tags),
+          );
+          return wrote
+            ? `Remembered as "${noteId}".`
+            : `Already remembered as "${noteId}" — unchanged, nothing to do.`;
         } catch (err) {
           warn(`remember failed: ${msg(err)}`);
           return `Error: ${msg(err)}`;

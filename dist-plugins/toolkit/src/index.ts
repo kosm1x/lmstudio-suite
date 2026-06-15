@@ -6675,6 +6675,20 @@ var ScopedFs = class {
       throw err;
     }
   }
+  /**
+   * Atomic write that skips the write entirely when the file already holds
+   * exactly `content`. Returns `true` if it wrote, `false` if the file was
+   * already identical. Compares against the FULL existing content (not the
+   * truncated read), so an over-cap but unchanged file is still detected as a
+   * no-op. Lets a write tool report "already saved" instead of redoing an
+   * expensive write — and gives a looping model a clear terminal signal.
+   */
+  async writeFileIfChanged(relPath, content) {
+    const existing = await this.readFileFull(relPath).catch(() => null);
+    if (existing === content) return false;
+    await this.writeFile(relPath, content);
+    return true;
+  }
   /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
   async writeBytes(relPath, data) {
     const p = this.resolvePath(relPath);
@@ -7962,8 +7976,8 @@ function createFsTools(options) {
       implementation: async ({ path, content }, { status, warn }) => {
         status(`Writing ${path}`);
         try {
-          await fs.writeFile(path, content);
-          return `Wrote ${content.length} characters to ${path}.`;
+          const wrote = await fs.writeFileIfChanged(path, content);
+          return wrote ? `Wrote ${content.length} characters to ${path}.` : `No change: ${path} already contains exactly this content (${content.length} characters). It is already saved \u2014 do not write it again.`;
         } catch (err) {
           const m = msg2(err);
           warn(`write_file failed: ${m}`);
@@ -8361,8 +8375,8 @@ Then a \`# Title\` and the body. Good name/description/type/tags are what let th
             return `Error: write_node only writes text notes (${[...WRITABLE_EXTENSIONS].join(", ")}); refusing "${path}".`;
           }
           try {
-            await fs.writeFile(path, content);
-            return `Wrote ${content.length} characters to ${path}.`;
+            const wrote = await fs.writeFileIfChanged(path, content);
+            return wrote ? `Wrote ${content.length} characters to ${path}.` : `No change: ${path} already contains exactly this content. The note is already saved (the map refreshes next turn) \u2014 do not write it again.`;
           } catch (err) {
             const m = msg3(err);
             warn(`write_node failed: ${m}`);
@@ -8644,12 +8658,17 @@ function createMemoryTools(options) {
   const fs = new ScopedFs(options.root);
   const subdir = (options.subdir ?? "memories").replace(/\/+$/, "");
   const rel = (id) => `${subdir}/${id}.md`;
-  async function chooseId(text, given) {
-    const base = given ? slugify(given) : slugify(text);
-    if (given) return base;
+  async function resolveId(text, given) {
+    if (given) return slugify(given);
+    const base = slugify(text);
+    const wanted = text.trim();
     let id = base;
     let n = 2;
-    while (await fs.exists(rel(id))) id = `${base}-${n++}`;
+    while (await fs.exists(rel(id))) {
+      const raw = await fs.readFileFull(rel(id)).catch(() => "");
+      if (raw && parseFrontmatter(raw).body.trim() === wanted) return id;
+      id = `${base}-${n++}`;
+    }
     return id;
   }
   return [
@@ -8669,9 +8688,12 @@ function createMemoryTools(options) {
         status("remember");
         if (!text.trim()) return "Error: nothing to remember (empty text).";
         try {
-          const noteId = await chooseId(text, id);
-          await fs.writeFile(rel(noteId), buildNote(text, tags));
-          return `Remembered as "${noteId}".`;
+          const noteId = await resolveId(text, id);
+          const wrote = await fs.writeFileIfChanged(
+            rel(noteId),
+            buildNote(text, tags)
+          );
+          return wrote ? `Remembered as "${noteId}".` : `Already remembered as "${noteId}" \u2014 unchanged, nothing to do.`;
         } catch (err) {
           warn(`remember failed: ${msg5(err)}`);
           return `Error: ${msg5(err)}`;

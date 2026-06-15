@@ -73,8 +73,10 @@ describe("remember / recall / forget round-trip", () => {
   });
 
   it("disambiguates colliding slugs and overwrites by explicit id", async () => {
+    // Two DIFFERENT facts that slugify to the same base still disambiguate (-2);
+    // only an *identical* fact dedups (covered separately below).
     const a = await call("remember", { text: "Project status update" });
-    const b = await call("remember", { text: "Project status update" });
+    const b = await call("remember", { text: "Project status update!!" });
     expect(a).toMatch(/"project-status-update"/);
     expect(b).toMatch(/"project-status-update-2"/);
 
@@ -90,6 +92,34 @@ describe("remember / recall / forget round-trip", () => {
         "utf8",
       ),
     ).toMatch(/new body/);
+  });
+
+  it("is idempotent: re-remembering an identical fact is a no-op, not a duplicate", async () => {
+    const a = await call("remember", { text: "Deploy runs at 6am" });
+    const b = await call("remember", { text: "Deploy runs at 6am" });
+    expect(a).toMatch(/Remembered as "deploy-runs-at-6am"\./);
+    expect(b).toMatch(/Already remembered as "deploy-runs-at-6am"/);
+    // The retry did NOT create a duplicate note-2.
+    expect(await fsp.readdir(join(root, "memories"))).toEqual([
+      "deploy-runs-at-6am.md",
+    ]);
+  });
+
+  it("re-remembering the same fact with new tags updates in place, no duplicate", async () => {
+    await call("remember", { text: "Deploy at 6am", tags: ["ops"] });
+    const b = await call("remember", {
+      text: "Deploy at 6am",
+      tags: ["ops", "prod"],
+    });
+    expect(b).toMatch(/Remembered as "deploy-at-6am"\./); // wrote (updated), not a no-op
+    expect(await fsp.readdir(join(root, "memories"))).toEqual([
+      "deploy-at-6am.md",
+    ]);
+    const note = await fsp.readFile(
+      join(root, "memories", "deploy-at-6am.md"),
+      "utf8",
+    );
+    expect(note).toMatch(/tags: \[ops, prod\]/);
   });
 
   it("rejects empty text and empty query", async () => {

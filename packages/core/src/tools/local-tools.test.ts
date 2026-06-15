@@ -37,6 +37,25 @@ afterEach(async () => {
   if (root) await fsp.rm(root, { recursive: true, force: true });
 });
 
+describe("write_file", () => {
+  it("writes new content, then reports a no-op on an identical re-write", async () => {
+    const first = await call("write_file", { path: "out.md", content: "hi" });
+    expect(first).toMatch(/Wrote 2 characters/);
+
+    const again = await call("write_file", { path: "out.md", content: "hi" });
+    expect(again).toMatch(/No change/);
+    expect(again).toMatch(/do not write it again/);
+    expect(await read("out.md")).toBe("hi");
+
+    // Different content writes normally again.
+    const changed = await call("write_file", {
+      path: "out.md",
+      content: "bye",
+    });
+    expect(changed).toMatch(/Wrote 3 characters/);
+  });
+});
+
 describe("edit_file", () => {
   it("makes a single exact-string edit", async () => {
     await seed("f.txt", "hello world");

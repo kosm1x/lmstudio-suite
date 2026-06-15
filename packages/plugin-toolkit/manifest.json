@@ -3,6 +3,13 @@
   "owner": "kosmix",
   "type": "plugin",
   "runner": "node",
-  "revision": 1,
-  "tags": ["tools", "meta", "web", "filesystem", "data", "memory"]
+  "revision": 2,
+  "tags": [
+    "tools",
+    "meta",
+    "web",
+    "filesystem",
+    "data",
+    "memory"
+  ]
 }

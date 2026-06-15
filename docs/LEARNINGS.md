@@ -66,6 +66,20 @@ The plugins import the unpublished workspace package `@lmstudio-suite/core`, so 
   match exactly once unless `replace_all`; not-found / ambiguous / empty / identical-old==new all
   return an error **before any write**. A model that gets "matches 3 times, add context or set
   replace_all" self-corrects; one that silently edited the first match would corrupt quietly.
+- **Idempotent writes break write-loops; a generic success feeds them.** A local model driving
+  `toolkit` re-wrote the same file 4× (each agentic round ~10 min of model latency, not tool time —
+  there is no embed/re-index on a write). The tool's contribution: `write_file`/`write_node` returned
+  the same `Wrote N characters` on every call, even for byte-identical content, so a model that
+  re-decided to write got **no "already done" signal** and looped. Fix: `ScopedFs.writeFileIfChanged`
+  (compare the FULL existing content — not the capped read — and skip the write if identical), and have
+  the tool return a distinct terminal no-op: `No change: … already contains exactly this content — do
+not write it again.` The 2nd–Nth identical write becomes a free no-op the model reads as "stop." Same
+  class for `remember`: a no-`id` retry used to spawn `note-2`, `note-3`…; now it reuses the same-fact
+  note's id so the retry updates in place (new tags included) instead of duplicating. The read-back
+  `.catch(() => null)` only ever forces a write attempt (ENOENT _or_ a real read error surfaces through
+  the write) — it can never fabricate a false "already saved." Idempotency only catches _identical_
+  re-writes; for a model that varies content each round, the backstops are LM Studio's per-tool
+  Ask/Allow approval and a lower max-prediction-rounds.
 
 ## Growing the suite (patterns from the Phase 1–5 roadmap build)
 
