@@ -78,8 +78,12 @@ export function isMutatingTool(name: string): boolean {
 }
 
 export interface ApprovalOptions {
-  /** Decide whether a given tool call needs confirmation (default: isMutatingTool). */
-  needsApproval?: (name: string, args: unknown) => boolean;
+  /**
+   * Decide whether a tool needs confirmation, by name (default: isMutatingTool).
+   * Evaluated once per tool when wrapping — it gates on identity, not per-call
+   * arguments (use `approve` for arg-aware decisions).
+   */
+  needsApproval?: (name: string) => boolean;
   /** Ask the user; return true to allow. Async (e.g. a stdin prompt). */
   approve: (name: string, args: unknown) => boolean | Promise<boolean>;
 }
@@ -92,7 +96,7 @@ export interface ApprovalOptions {
 export function withApproval(tools: Tool[], options: ApprovalOptions): Tool[] {
   const needs = options.needsApproval ?? ((name) => isMutatingTool(name));
   return tools.map((t): Tool => {
-    if (!needs(t.name, undefined)) return t;
+    if (!needs(t.name)) return t;
     const inner = (t as { implementation?: ToolImpl }).implementation;
     if (typeof inner !== "function") return t;
     return {

@@ -133,6 +133,20 @@ var ScopedFs = class {
       throw err;
     }
   }
+  /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
+  async writeBytes(relPath, data) {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, data);
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
+  }
   /** Move/rename a file within the root; both ends are traversal-guarded. */
   async move(fromRel, toRel) {
     const from = this.resolvePath(fromRel);
@@ -384,9 +398,13 @@ function checkCommandPolicy(command, policy) {
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
 
-// packages/core/src/tools/local-tools.ts
+// packages/core/src/tools/http-tools.ts
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
+
+// packages/core/src/tools/local-tools.ts
+import { tool as tool3 } from "@lmstudio/sdk";
+import { z as z3 } from "zod";
 var SEARCH_MAX_MATCHES = 200;
 var SEARCH_MAX_FILE_BYTES = 2e6;
 var GLOB_MAX_RESULTS = 500;
@@ -394,11 +412,11 @@ var msg = (err) => err instanceof Error ? err.message : String(err);
 function createFsTools(options) {
   const fs = new ScopedFs(options.root);
   return [
-    tool2({
+    tool3({
       name: "read_file",
       description: "Read a UTF-8 text file. Paths are relative to the working directory; '..' escapes are rejected.",
       parameters: {
-        path: z2.string().describe("Relative path of the file to read.")
+        path: z3.string().describe("Relative path of the file to read.")
       },
       implementation: async ({ path }, { status, warn }) => {
         status(`Reading ${path}`);
@@ -411,12 +429,12 @@ function createFsTools(options) {
         }
       }
     }),
-    tool2({
+    tool3({
       name: "write_file",
       description: "Create or overwrite a UTF-8 text file (parent directories are created). Paths are relative to the working directory.",
       parameters: {
-        path: z2.string().describe("Relative destination path."),
-        content: z2.string().describe("The full file contents to write.")
+        path: z3.string().describe("Relative destination path."),
+        content: z3.string().describe("The full file contents to write.")
       },
       implementation: async ({ path, content }, { status, warn }) => {
         status(`Writing ${path}`);
@@ -430,16 +448,16 @@ function createFsTools(options) {
         }
       }
     }),
-    tool2({
+    tool3({
       name: "edit_file",
       description: "Make a surgical edit to an existing text file: replace an exact substring with new text, without rewriting the whole file. By default old_string must match EXACTLY ONCE \u2014 include enough surrounding context (indentation, adjacent lines) to make it unique. Set replace_all to change every occurrence (e.g. renaming a symbol). The edit fails WITHOUT writing if old_string is empty, missing, equal to new_string, or (when replace_all is off) ambiguous. Matching is literal \u2014 no regex, no $ escapes. Paths are relative to the working directory; '..' escapes are rejected.",
       parameters: {
-        path: z2.string().describe("Relative path of the file to edit."),
-        old_string: z2.string().describe(
+        path: z3.string().describe("Relative path of the file to edit."),
+        old_string: z3.string().describe(
           "Exact text to find. Must match once unless replace_all is set."
         ),
-        new_string: z2.string().describe("Text to replace it with."),
-        replace_all: z2.boolean().default(false).describe(
+        new_string: z3.string().describe("Text to replace it with."),
+        replace_all: z3.boolean().default(false).describe(
           "Replace every occurrence instead of requiring a unique match."
         )
       },
@@ -467,11 +485,11 @@ function createFsTools(options) {
         }
       }
     }),
-    tool2({
+    tool3({
       name: "list_dir",
       description: "List the files and subdirectories of a directory. Paths are relative to the working directory; use '.' for the root.",
       parameters: {
-        path: z2.string().default(".").describe("Relative directory path (defaults to '.').")
+        path: z3.string().default(".").describe("Relative directory path (defaults to '.').")
       },
       implementation: async ({ path }, { status, warn }) => {
         status(`Listing ${path}`);
@@ -486,18 +504,18 @@ function createFsTools(options) {
         }
       }
     }),
-    tool2({
+    tool3({
       name: "search_files",
       description: "Search file CONTENTS for a regular expression, recursively under the working directory (.git and node_modules are skipped, binary files ignored). Returns matching lines as `path:line: text`. Optionally restrict to files matching a glob. Use this to find where something is defined or used before reading whole files. Output is capped \u2014 narrow the pattern or glob if you see a truncation marker.",
       parameters: {
-        pattern: z2.string().describe(
+        pattern: z3.string().describe(
           "Regular expression to search for (JavaScript regex syntax)."
         ),
-        glob: z2.string().optional().describe(
+        glob: z3.string().optional().describe(
           "Only search files whose path matches this glob (e.g. '**/*.ts')."
         ),
-        path: z2.string().default(".").describe("Subdirectory to search under (default '.')."),
-        ignore_case: z2.boolean().default(false).describe("Case-insensitive match.")
+        path: z3.string().default(".").describe("Subdirectory to search under (default '.')."),
+        ignore_case: z3.boolean().default(false).describe("Case-insensitive match.")
       },
       implementation: async ({ pattern, glob, path, ignore_case }, { status, warn }) => {
         status(`Searching for /${pattern}/`);
@@ -554,12 +572,12 @@ function createFsTools(options) {
 \u2026[truncated at ${SEARCH_MAX_MATCHES} matches]` : "");
       }
     }),
-    tool2({
+    tool3({
       name: "glob",
       description: "List files whose path matches a glob pattern (e.g. '**/*.ts', 'src/**/*.test.ts'), recursively under the working directory (.git and node_modules skipped). Supports *, ?, and ** (crossing directories). Returns matching paths, sorted. Use to discover files by name/extension before reading.",
       parameters: {
-        pattern: z2.string().describe("Glob pattern to match against file paths."),
-        path: z2.string().default(".").describe(
+        pattern: z3.string().describe("Glob pattern to match against file paths."),
+        path: z3.string().default(".").describe(
           "Subdirectory to search under (default '.'); the pattern matches paths relative to it."
         )
       },
@@ -591,12 +609,12 @@ function createFsTools(options) {
 \u2026[truncated at ${GLOB_MAX_RESULTS}]` : "");
       }
     }),
-    tool2({
+    tool3({
       name: "move_file",
       description: "Move or rename a file or directory within the working directory. Both paths are relative; '..' escapes are rejected. Missing parent directories of the destination are created, and an existing destination is overwritten.",
       parameters: {
-        from: z2.string().describe("Existing relative path."),
-        to: z2.string().describe("New relative path.")
+        from: z3.string().describe("Existing relative path."),
+        to: z3.string().describe("New relative path.")
       },
       implementation: async ({ from, to }, { status, warn }) => {
         status(`Moving ${from} \u2192 ${to}`);
@@ -610,11 +628,11 @@ function createFsTools(options) {
         }
       }
     }),
-    tool2({
+    tool3({
       name: "delete_file",
       description: "Delete a file, or a directory and all its contents, within the working directory. Relative paths only; '..' escapes are rejected; refuses to delete the root itself. Irreversible \u2014 there is no trash.",
       parameters: {
-        path: z2.string().describe("Relative path to delete.")
+        path: z3.string().describe("Relative path to delete.")
       },
       implementation: async ({ path }, { status, warn }) => {
         status(`Deleting ${path}`);
@@ -629,11 +647,11 @@ function createFsTools(options) {
         }
       }
     }),
-    tool2({
+    tool3({
       name: "make_dir",
       description: "Create a directory (and any missing parents) within the working directory. Relative paths only; '..' escapes are rejected.",
       parameters: {
-        path: z2.string().describe("Relative directory path to create.")
+        path: z3.string().describe("Relative directory path to create.")
       },
       implementation: async ({ path }, { status, warn }) => {
         status(`Creating ${path}/`);
@@ -647,11 +665,11 @@ function createFsTools(options) {
         }
       }
     }),
-    tool2({
+    tool3({
       name: "stat_path",
       description: "Report whether a path exists and whether it is a file or directory, with its size in bytes and last-modified time. Relative paths only.",
       parameters: {
-        path: z2.string().describe("Relative path to inspect.")
+        path: z3.string().describe("Relative path to inspect.")
       },
       implementation: async ({ path }, { status, warn }) => {
         status(`Stat ${path}`);
@@ -672,11 +690,11 @@ function createFsTools(options) {
 function createShellTool(options) {
   const timeoutMs = options.timeoutMs ?? 3e4;
   const policy = options.policy ?? {};
-  return tool2({
+  return tool3({
     name: "run_shell",
     description: "Run a shell command in the working directory and return its exit code, stdout, and stderr. Use for builds, tests, git, or file tooling. The operator may restrict which commands are allowed; a blocked command is refused without running.",
     parameters: {
-      command: z2.string().describe("The shell command line to execute.")
+      command: z3.string().describe("The shell command line to execute.")
     },
     implementation: async ({ command }, { status, warn, signal }) => {
       const denial = checkCommandPolicy(command, policy);
@@ -704,8 +722,16 @@ ${r.stderr}`);
 }
 
 // packages/core/src/tools/map-tools.ts
-import { tool as tool3 } from "@lmstudio/sdk";
-import { z as z3 } from "zod";
+import { tool as tool4 } from "@lmstudio/sdk";
+import { z as z4 } from "zod";
+
+// packages/core/src/tools/data-tools.ts
+import { tool as tool5 } from "@lmstudio/sdk";
+import { z as z5 } from "zod";
+
+// packages/core/src/tools/memory-tools.ts
+import { tool as tool6 } from "@lmstudio/sdk";
+import { z as z6 } from "zod";
 
 // packages/plugin-local/src/tools.ts
 async function resolveRoot(ctl, configuredDir) {

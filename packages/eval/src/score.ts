@@ -18,6 +18,8 @@ export interface EvalTask {
   validateArgs?: (args: Record<string, unknown>) => boolean;
 }
 
+import { isMutatingTool } from "@lmstudio-suite/core";
+
 export interface RecordedCall {
   name: string;
   args: unknown;
@@ -30,7 +32,13 @@ export interface EvalResult {
   called: boolean;
   /** Did at least one call to it have valid args? */
   validArgs: boolean;
-  /** called && validArgs. */
+  /**
+   * Mutating tools the model called. Every task is read-only, so a correct
+   * model calls none — a non-empty list fails the task and catches a model
+   * that "sprays" every tool to game the eval.
+   */
+  mutatingCalls: string[];
+  /** called && validArgs && no mutating tool was called. */
   pass: boolean;
   /** Names of every tool the model called, in order. */
   toolsCalled: string[];
@@ -49,12 +57,16 @@ export function scoreTask(task: EvalTask, calls: RecordedCall[]): EvalResult {
         return false;
       }
     });
+  const mutatingCalls = [
+    ...new Set(calls.filter((c) => isMutatingTool(c.name)).map((c) => c.name)),
+  ];
   return {
     task: task.name,
     expectedTool: task.expectedTool,
     called,
     validArgs,
-    pass: called && validArgs,
+    mutatingCalls,
+    pass: called && validArgs && mutatingCalls.length === 0,
     toolsCalled: calls.map((c) => c.name),
   };
 }
@@ -81,7 +93,13 @@ export function buildScorecard(
 /** Render a scorecard as a plain-text table + summary line. */
 export function formatScorecard(card: Scorecard): string {
   const rows = card.results.map((r) => {
-    const mark = r.pass ? "PASS" : r.called ? "BAD-ARGS" : "MISSED";
+    const mark = r.pass
+      ? "PASS"
+      : r.mutatingCalls.length > 0
+        ? "MUTATED"
+        : r.called
+          ? "BAD-ARGS"
+          : "MISSED";
     return `  ${mark.padEnd(9)} ${r.task.padEnd(20)} expected ${r.expectedTool} | called: ${r.toolsCalled.join(", ") || "(none)"}`;
   });
   const pct =

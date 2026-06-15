@@ -6,7 +6,7 @@ Part of [lmstudio-suite](https://github.com/kosm1x/lmstudio-suite).
 
 ## How it works
 
-For each task in `src/tasks.ts` it gives the loaded model a representative toolset (web search + filesystem + data), runs an `.act()` loop, and **traces every tool call** (via the suite's `withTrace` decorator). A task passes when the model calls the expected tool with args that satisfy the task's validator. Scoring is pure (`src/score.ts`) and unit-tested; the runner just feeds it the recorded calls and prints a scorecard.
+For each task in `src/tasks.ts` it gives the loaded model a representative toolset (web search + filesystem + data), runs an `.act()` loop, and **traces every tool call** (via the suite's `withTrace` decorator). A task passes when the model calls the expected tool with args that satisfy the task's validator **and calls no mutating tool** — every task is read-only, so a model that "sprays" every tool (writing/deleting along the way) to game the metric fails. Scoring is pure (`src/score.ts`) and unit-tested; the runner just feeds it the recorded calls and prints a scorecard (`PASS` / `BAD-ARGS` / `MUTATED` / `MISSED`).
 
 ## Run it
 

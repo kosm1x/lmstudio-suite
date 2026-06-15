@@ -67,6 +67,39 @@ The plugins import the unpublished workspace package `@lmstudio-suite/core`, so 
   return an error **before any write**. A model that gets "matches 3 times, add context or set
   replace_all" self-corrects; one that silently edited the first match would corrupt quietly.
 
+## Growing the suite (patterns from the Phase 1–5 roadmap build)
+
+- **One core builder, every consumer.** Every tool is a `tool()` builder in `core/tools`, wired into a
+  plugin AND `agent-cli`. Adding `edit_file`/`search_files`/etc. to `createFsTools` lit them up in the
+  plugin and the CLI at once. The `toolkit` meta-plugin and the `eval` harness just compose the same
+  builders — no capability is implemented twice, so the path guard / SSRF guard / caps are identical
+  everywhere.
+- **CI earns its keep immediately.** The first full `vitest run` in CI caught a plugin test that had
+  silently broken three commits earlier — per-phase _scoped_ runs never executed it. Scope runs for
+  speed while iterating; gate on the whole suite.
+- **`node:sqlite` is the dependency-free SQL story** (Node ≥22): open `{ readOnly: true }` (the engine
+  rejects writes) AND pre-check SELECT/WITH-only — neither alone. Stream results with `.iterate()` and
+  stop at the row cap; `.all()` materialises the whole set and the "cap" becomes display-only. Same
+  trap for file readers: cap the _read_ (stat-then-refuse), not just the rows shown.
+- **One audited network path.** `guardedFetch` follows redirects manually and re-validates **every**
+  hop's host against the SSRF guard before contacting it (a public URL can 30x into `169.254.169.254`).
+  `fetch_url`, `http_request`, `download_file`, and `crawl` all route through it; default-deny private
+  hosts at every layer. The guard keys on `URL.hostname` (normalises IPv4-mapped IPv6, trailing-dot
+  FQDNs), not a smuggle-able Host header.
+- **Writable memory closes the loop for free.** `remember` writes a markdown note _into the knowledge
+  dir the RAG plugin indexes_, so the index rebuilds on the next message and the fact is retrievable —
+  no separate store. Lesson the auditor caught: a model-controlled `id` (in `forget`) must be sanitized
+  the _same way_ as the write path (`remember` slugified; `forget` didn't → `forget("../note")` deleted
+  real notes). `ScopedFs` guards the root, not a subdir.
+- **Decorate tools, don't fork them.** `withApproval` / `withTrace` wrap any `Tool[]`, overriding only
+  `implementation` so the SDK schema + `checkParameters` survive. Keep the mutating-tool list complete
+  or a new writer is silently un-gated. In-app approval is LM Studio's per-tool Ask/Allow — the wrapper
+  is for the CLI, opt-in (`--approve`) so non-interactive runs don't hang.
+- **A tool-selection eval must resist spray-all.** Giving every task the full toolset and passing on
+  "expected tool appeared once" lets a model that calls _everything_ score 100%. Since the tasks are
+  read-only, failing any task where a _mutating_ tool was called (plus stronger arg validators) makes
+  the metric measure selection, not coverage.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).

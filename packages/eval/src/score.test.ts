@@ -34,12 +34,21 @@ describe("scoreTask", () => {
     expect(r).toMatchObject({ called: true, validArgs: false, pass: false });
   });
 
-  it("does not penalise extra tool calls before the right one", () => {
+  it("does not penalise extra READ-ONLY calls before the right one", () => {
     const r = scoreTask(task, [
       { name: "read_file", args: {} },
       { name: "calculator", args: { expression: "2*2" } },
     ]);
     expect(r.pass).toBe(true);
+  });
+
+  it("fails a read-only task when the model calls a mutating tool (anti-spray)", () => {
+    const r = scoreTask(task, [
+      { name: "calculator", args: { expression: "2*2" } },
+      { name: "write_file", args: { path: "x", content: "y" } },
+    ]);
+    expect(r.mutatingCalls).toEqual(["write_file"]);
+    expect(r.pass).toBe(false);
   });
 
   it("treats a throwing validator as invalid args, not a crash", () => {

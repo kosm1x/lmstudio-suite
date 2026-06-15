@@ -12,8 +12,11 @@ export const TASKS: EvalTask[] = [
     name: "arithmetic",
     prompt: "What is 47 * 89 + 3? Use a tool to compute it exactly.",
     expectedTool: "calculator",
+    // Require both operands so a trivial `calculator({expression:"47"})` fails.
     validateArgs: (a) =>
-      typeof a.expression === "string" && a.expression.includes("47"),
+      typeof a.expression === "string" &&
+      a.expression.includes("47") &&
+      a.expression.includes("89"),
   },
   {
     name: "read-file",

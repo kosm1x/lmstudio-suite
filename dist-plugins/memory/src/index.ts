@@ -78,6 +78,20 @@ var ScopedFs = class {
       throw err;
     }
   }
+  /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
+  async writeBytes(relPath, data) {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, data);
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
+  }
   /** Move/rename a file within the root; both ends are traversal-guarded. */
   async move(fromRel, toRel) {
     const from = this.resolvePath(fromRel);
@@ -347,21 +361,25 @@ function fmArray(data, key) {
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
 
-// packages/core/src/tools/local-tools.ts
+// packages/core/src/tools/http-tools.ts
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
 
-// packages/core/src/tools/map-tools.ts
+// packages/core/src/tools/local-tools.ts
 import { tool as tool3 } from "@lmstudio/sdk";
 import { z as z3 } from "zod";
 
-// packages/core/src/tools/data-tools.ts
+// packages/core/src/tools/map-tools.ts
 import { tool as tool4 } from "@lmstudio/sdk";
 import { z as z4 } from "zod";
 
-// packages/core/src/tools/memory-tools.ts
+// packages/core/src/tools/data-tools.ts
 import { tool as tool5 } from "@lmstudio/sdk";
 import { z as z5 } from "zod";
+
+// packages/core/src/tools/memory-tools.ts
+import { tool as tool6 } from "@lmstudio/sdk";
+import { z as z6 } from "zod";
 var msg = (err) => err instanceof Error ? err.message : String(err);
 var RECALL_MAX = 10;
 function slugify(text) {
@@ -390,15 +408,15 @@ function createMemoryTools(options) {
     return id;
   }
   return [
-    tool5({
+    tool6({
       name: "remember",
       description: "Save a fact to long-term memory so it can be retrieved in later sessions. Use when the user shares something worth keeping (a preference, decision, name, path). Stored as a markdown note in the knowledge directory, so the memory plugin's retrieval picks it up automatically. Pass an existing id to update that note.",
       parameters: {
-        text: z5.string().describe("The fact to remember. Keep it concise but complete."),
-        tags: z5.array(z5.string()).optional().describe(
+        text: z6.string().describe("The fact to remember. Keep it concise but complete."),
+        tags: z6.array(z6.string()).optional().describe(
           "Optional tags for grouping (e.g. ['preference', 'setup'])."
         ),
-        id: z5.string().optional().describe(
+        id: z6.string().optional().describe(
           "Existing note id to overwrite. Omit to create a new note."
         )
       },
@@ -415,12 +433,12 @@ function createMemoryTools(options) {
         }
       }
     }),
-    tool5({
+    tool6({
       name: "recall",
       description: "Search saved memories by keyword and return the best matches with their ids. Use to check what you already know before answering, or to find the id of a note to update or forget. Returns an empty result \u2014 not an error \u2014 when nothing matches.",
       parameters: {
-        query: z5.string().describe("Keywords to search saved memories for."),
-        limit: z5.number().optional().describe(`Max matches to return (default ${RECALL_MAX}).`)
+        query: z6.string().describe("Keywords to search saved memories for."),
+        limit: z6.number().optional().describe(`Max matches to return (default ${RECALL_MAX}).`)
       },
       implementation: async ({ query, limit }, { status, warn }) => {
         status("recall");
@@ -455,11 +473,11 @@ function createMemoryTools(options) {
         }
       }
     }),
-    tool5({
+    tool6({
       name: "forget",
       description: "Delete a saved memory by its id (use recall to find the id first). Use when a fact is wrong or the user asks you to forget it. Irreversible.",
       parameters: {
-        id: z5.string().describe("The id of the memory note to delete.")
+        id: z6.string().describe("The id of the memory note to delete.")
       },
       implementation: async ({ id }, { status, warn }) => {
         status("forget");

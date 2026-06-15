@@ -97,6 +97,20 @@ var ScopedFs = class {
       throw err;
     }
   }
+  /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
+  async writeBytes(relPath, data) {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, data);
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
+  }
   /** Move/rename a file within the root; both ends are traversal-guarded. */
   async move(fromRel, toRel) {
     const from = this.resolvePath(fromRel);
@@ -440,17 +454,21 @@ function checkReadOnlySql(sql) {
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
 
-// packages/core/src/tools/local-tools.ts
+// packages/core/src/tools/http-tools.ts
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
 
-// packages/core/src/tools/map-tools.ts
+// packages/core/src/tools/local-tools.ts
 import { tool as tool3 } from "@lmstudio/sdk";
 import { z as z3 } from "zod";
 
-// packages/core/src/tools/data-tools.ts
+// packages/core/src/tools/map-tools.ts
 import { tool as tool4 } from "@lmstudio/sdk";
 import { z as z4 } from "zod";
+
+// packages/core/src/tools/data-tools.ts
+import { tool as tool5 } from "@lmstudio/sdk";
+import { z as z5 } from "zod";
 var msg = (err) => err instanceof Error ? err.message : String(err);
 var SQLITE_MAX_ROWS = 100;
 var CSV_MAX_ROWS = 100;
@@ -473,11 +491,11 @@ async function defaultOpenSqlite(absPath) {
 function createDataTools(options) {
   const fs = new ScopedFs(options.root);
   return [
-    tool4({
+    tool5({
       name: "calculator",
       description: "Evaluate an arithmetic expression exactly and return the number. Supports + - * / % ^ (power), parentheses, unary minus, and decimal/scientific numbers. Use this instead of computing in your head. No variables or functions.",
       parameters: {
-        expression: z4.string().describe("Arithmetic expression, e.g. '(3 + 4) * 2 ^ 3'.")
+        expression: z5.string().describe("Arithmetic expression, e.g. '(3 + 4) * 2 ^ 3'.")
       },
       implementation: async ({ expression }, { status }) => {
         status(`= ${expression}`);
@@ -488,15 +506,15 @@ function createDataTools(options) {
         }
       }
     }),
-    tool4({
+    tool5({
       name: "parse_json",
       description: `Read a value out of JSON \u2014 from a file in the working directory or an inline string \u2014 using a jq-lite path like '.users[0].name' or 'data["key"]'. Returns the selected value as JSON. Omit the path (or pass '.') to return the whole document.`,
       parameters: {
-        path: z4.string().default(".").describe(
+        path: z5.string().default(".").describe(
           "JSON path to extract, e.g. '.items[2].id'. '.' = the whole document."
         ),
-        file: z4.string().optional().describe("Relative path to a .json file to read."),
-        json: z4.string().optional().describe("Inline JSON string (used when 'file' is not given).")
+        file: z5.string().optional().describe("Relative path to a .json file to read."),
+        json: z5.string().optional().describe("Inline JSON string (used when 'file' is not given).")
       },
       implementation: async ({ path, file, json }, { status, warn }) => {
         status("parse_json");
@@ -520,16 +538,16 @@ function createDataTools(options) {
         }
       }
     }),
-    tool4({
+    tool5({
       name: "read_csv",
       description: "Read a CSV file from the working directory: preview rows, select columns, filter by an exact column value, or compute one aggregate (count/sum/avg/min/max). Handles quoted fields. Row output is capped \u2014 use a filter or aggregate on large files.",
       parameters: {
-        file: z4.string().describe("Relative path to the .csv file."),
-        columns: z4.array(z4.string()).optional().describe("Subset of column names to return (default: all)."),
-        filter_column: z4.string().optional().describe("Column to filter on (exact match against filter_value)."),
-        filter_value: z4.string().optional().describe("Value the filter_column must equal."),
-        aggregate: z4.enum(["count", "sum", "avg", "min", "max"]).optional().describe("Compute this aggregate instead of returning rows."),
-        aggregate_column: z4.string().optional().describe("Numeric column for sum/avg/min/max.")
+        file: z5.string().describe("Relative path to the .csv file."),
+        columns: z5.array(z5.string()).optional().describe("Subset of column names to return (default: all)."),
+        filter_column: z5.string().optional().describe("Column to filter on (exact match against filter_value)."),
+        filter_value: z5.string().optional().describe("Value the filter_column must equal."),
+        aggregate: z5.enum(["count", "sum", "avg", "min", "max"]).optional().describe("Compute this aggregate instead of returning rows."),
+        aggregate_column: z5.string().optional().describe("Numeric column for sum/avg/min/max.")
       },
       implementation: async ({
         file,
@@ -583,12 +601,12 @@ function createDataTools(options) {
         }
       }
     }),
-    tool4({
+    tool5({
       name: "query_sqlite",
       description: "Run a READ-ONLY SQL query (SELECT / WITH only) against a SQLite .db file in the working directory and return the rows as JSON. Writes are refused. Row output is capped. Use this for precise lookups/joins/aggregates over local databases.",
       parameters: {
-        file: z4.string().describe("Relative path to the SQLite .db file."),
-        query: z4.string().describe("A single SELECT or WITH statement.")
+        file: z5.string().describe("Relative path to the SQLite .db file."),
+        query: z5.string().describe("A single SELECT or WITH statement.")
       },
       implementation: async ({ file, query }, { status, warn }) => {
         status("query_sqlite");
@@ -633,6 +651,10 @@ function createDataTools(options) {
     })
   ];
 }
+
+// packages/core/src/tools/memory-tools.ts
+import { tool as tool6 } from "@lmstudio/sdk";
+import { z as z6 } from "zod";
 
 // packages/plugin-data/src/tools.ts
 async function resolveRoot(ctl, configuredDir) {

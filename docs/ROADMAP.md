@@ -1,5 +1,10 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
+> **Status: ✅ ALL PHASES COMPLETE.** Phases 1–5 shipped on `phase1-tooling`
+> (typecheck clean, full suite green, 8 plugins bundle). `data-tools`, `toolkit`,
+> and `calc-generator` are new and pending a `lms push`; `web-tools` / `local-tools`
+> / `memory` gained tools/config and want a re-push.
+
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the
 commands to verify. Pick a phase, do the tasks top-to-bottom, keep the suite green.
@@ -37,7 +42,7 @@ Suggested execution order: **Phase 1 → 2 → 4 → 3 → 5** (most felt improv
 
 ---
 
-## Phase 1 — Sharpen the existing tools (foundation)
+## Phase 1 — Sharpen the existing tools (foundation) ✅ DONE
 
 Highest ROI; no new plugins. Goal: precise editing + retrieval + safe file ops + CI.
 

@@ -2,11 +2,11 @@
  * Command allow/deny policy for run_shell.
  *
  * This is a GUARDRAIL, not a sandbox. A shell can always obfuscate intent
- * (subshells, `sh -c "…"`, `eval`, env tricks), so a determined model can step
- * around it. What it does cheaply: when an operator configures a deny/allow
- * list, block the obvious (`rm`, `curl … | sh`) at the leading executable of
- * each pipeline segment. Pair it with LM Studio's per-tool Ask/Allow prompts
- * for real gating.
+ * (subshells `$(…)`/backticks, `sh -c "…"`, `eval`, `( … )` / `{ …; }`
+ * grouping, env tricks), so a determined model can step around it. What it does
+ * cheaply: when an operator configures a deny/allow list, block the obvious
+ * (`rm`, `curl … | sh`) at the leading executable of each pipeline segment.
+ * Pair it with LM Studio's per-tool Ask/Allow prompts for real gating.
  */
 import { basename } from "node:path";
 

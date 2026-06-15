@@ -15,8 +15,11 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities
 
-All five plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
+Five plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
 [`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning).
+Three more are built and bundle-ready, pending a `lms push`: **`data-tools`**, **`toolkit`** (the whole suite in one install), and **`calc-generator`** (a Generator example). The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all phases complete.
+
+> **Note on Hub state:** `web-tools`, `local-tools`, and `memory` gained new tools/config in the roadmap work (web → `http_request`/`download`/`crawl`; local → `edit`/`search`/`glob`/file-ops + shell policy; memory → `remember`/`recall`/`forget`). Re-push them to refresh the published revision.
 
 | Capability                        | Surface                       | Status                                                                         |
 | --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
