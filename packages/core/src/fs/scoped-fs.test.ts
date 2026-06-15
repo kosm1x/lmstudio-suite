@@ -77,3 +77,69 @@ describe("ScopedFs operations", () => {
     );
   });
 });
+
+describe("ScopedFs stat", () => {
+  it("reports type and size for a file, and type for a dir", async () => {
+    await fs.writeFile("a.txt", "hello");
+    await fs.mkdir("sub");
+    const file = await fs.stat("a.txt");
+    expect(file.type).toBe("file");
+    expect(file.size).toBe(5);
+    expect(typeof file.mtimeMs).toBe("number");
+    expect((await fs.stat("sub")).type).toBe("dir");
+  });
+
+  it("throws ENOENT for a missing path", async () => {
+    await expect(fs.stat("nope.txt")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects a stat that escapes the root", async () => {
+    await expect(fs.stat("../outside")).rejects.toThrow(PathEscapeError);
+  });
+});
+
+describe("ScopedFs walk", () => {
+  beforeEach(async () => {
+    await fs.writeFile("a.txt", "1");
+    await fs.writeFile("sub/b.txt", "2");
+    await fs.writeFile("sub/deep/c.txt", "3");
+    await fs.writeFile("node_modules/pkg/index.js", "ignored");
+    await fs.writeFile(".git/config", "ignored");
+  });
+
+  const collect = async (rel?: string, ignore?: ReadonlySet<string>) => {
+    const out: string[] = [];
+    for await (const p of fs.walk(rel, ignore ? { ignore } : {})) out.push(p);
+    return out.sort();
+  };
+
+  it("yields files recursively as POSIX paths, pruning ignored dirs", async () => {
+    expect(await collect()).toEqual(["a.txt", "sub/b.txt", "sub/deep/c.txt"]);
+  });
+
+  it("walks a subdirectory", async () => {
+    expect(await collect("sub")).toEqual(["sub/b.txt", "sub/deep/c.txt"]);
+  });
+
+  it("honors a custom ignore set (empty = include everything)", async () => {
+    const out = await collect(".", new Set<string>());
+    expect(out).toContain("node_modules/pkg/index.js");
+    expect(out).toContain(".git/config");
+  });
+
+  it("does not walk into a directory symlink that points outside the root", async () => {
+    const { symlink, mkdtemp, writeFile } = await import("node:fs/promises");
+    const outside = await mkdtemp(join(tmpdir(), "scoped-fs-outside-"));
+    await writeFile(join(outside, "secret.txt"), "TOP SECRET");
+    try {
+      await symlink(outside, join(dir, "link"), "dir");
+    } catch {
+      return; // platform without symlink support — skip
+    }
+    const out = await collect(".", new Set<string>());
+    // The symlinked dir is reported as neither file nor dir by readdir, so it
+    // is never recursed and the outside file never surfaces.
+    expect(out.some((p) => p.includes("secret"))).toBe(false);
+    await rm(outside, { recursive: true, force: true });
+  });
+});

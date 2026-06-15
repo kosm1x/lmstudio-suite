@@ -46,6 +46,10 @@ import { LMStudioClient } from "@lmstudio/sdk";
 import { promises as fsp } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+var DEFAULT_IGNORE_DIRS = /* @__PURE__ */ new Set([
+  ".git",
+  "node_modules"
+]);
 var PathEscapeError = class extends Error {
   constructor(p) {
     super(`Path escapes the allowed root directory: ${p}`);
@@ -138,6 +142,42 @@ var ScopedFs = class {
       return false;
     }
   }
+  /** Type + size + mtime for a path. Throws (ENOENT) if it does not exist. */
+  async stat(relPath) {
+    const s = await fsp.stat(this.resolvePath(relPath));
+    return {
+      type: s.isDirectory() ? "dir" : s.isFile() ? "file" : "other",
+      size: s.size,
+      mtimeMs: s.mtimeMs
+    };
+  }
+  /**
+   * Recursively yield file paths (relative to root, POSIX-separated `/`) under
+   * `relPath`. Yields files only; directories whose name is in `ignore` are
+   * pruned. Symlinks are not followed, and unreadable directories are skipped
+   * rather than throwing. Iteration order is unspecified — sort if you need it.
+   */
+  async *walk(relPath = ".", options = {}) {
+    const ignore = options.ignore ?? DEFAULT_IGNORE_DIRS;
+    const stack = [this.resolvePath(relPath)];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      let entries;
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        const abs = resolve(dir, e.name);
+        if (e.isDirectory()) {
+          if (!ignore.has(e.name)) stack.push(abs);
+        } else if (e.isFile()) {
+          yield relative(this.root, abs).split(sep).join("/");
+        }
+      }
+    }
+  }
   async mkdir(relPath) {
     await fsp.mkdir(this.resolvePath(relPath), { recursive: true });
   }
@@ -149,6 +189,34 @@ var ScopedFs = class {
     await fsp.rm(p, { recursive: true, force: true });
   }
 };
+
+// packages/core/src/fs/glob.ts
+function globToRegExp(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        i++;
+        if (glob[i + 1] === "/") {
+          i++;
+          re += "(?:[^/]*/)*";
+        } else {
+          re += ".*";
+        }
+      } else {
+        re += "[^/]*";
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+    } else if ("\\^$.|+()[]{}".includes(c)) {
+      re += "\\" + c;
+    } else {
+      re += c;
+    }
+  }
+  return new RegExp("^" + re + "$");
+}
 
 // packages/core/src/exec/run.ts
 import { spawn } from "node:child_process";
@@ -271,6 +339,9 @@ import { z } from "zod";
 // packages/core/src/tools/local-tools.ts
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
+var SEARCH_MAX_MATCHES = 200;
+var SEARCH_MAX_FILE_BYTES = 2e6;
+var GLOB_MAX_RESULTS = 500;
 var msg = (err) => err instanceof Error ? err.message : String(err);
 function createFsTools(options) {
   const fs = new ScopedFs(options.root);
@@ -363,6 +434,187 @@ function createFsTools(options) {
         } catch (err) {
           const m = msg(err);
           warn(`list_dir failed: ${m}`);
+          return `Error: ${m}`;
+        }
+      }
+    }),
+    tool2({
+      name: "search_files",
+      description: "Search file CONTENTS for a regular expression, recursively under the working directory (.git and node_modules are skipped, binary files ignored). Returns matching lines as `path:line: text`. Optionally restrict to files matching a glob. Use this to find where something is defined or used before reading whole files. Output is capped \u2014 narrow the pattern or glob if you see a truncation marker.",
+      parameters: {
+        pattern: z2.string().describe(
+          "Regular expression to search for (JavaScript regex syntax)."
+        ),
+        glob: z2.string().optional().describe(
+          "Only search files whose path matches this glob (e.g. '**/*.ts')."
+        ),
+        path: z2.string().default(".").describe("Subdirectory to search under (default '.')."),
+        ignore_case: z2.boolean().default(false).describe("Case-insensitive match.")
+      },
+      implementation: async ({ pattern, glob, path, ignore_case }, { status, warn }) => {
+        status(`Searching for /${pattern}/`);
+        let re;
+        try {
+          re = new RegExp(pattern, ignore_case ? "i" : "");
+        } catch (err) {
+          return `Error: invalid regular expression: ${msg(err)}`;
+        }
+        const globRe = glob ? globToRegExp(glob) : null;
+        const base = path === "." ? "" : path.replace(/\/+$/, "") + "/";
+        const out = [];
+        let truncated = false;
+        try {
+          outer: for await (const rel of fs.walk(path)) {
+            if (globRe) {
+              const relBase = base && rel.startsWith(base) ? rel.slice(base.length) : rel;
+              if (!globRe.test(relBase)) continue;
+            }
+            let info;
+            try {
+              info = await fs.stat(rel);
+            } catch {
+              continue;
+            }
+            if (info.size > SEARCH_MAX_FILE_BYTES) continue;
+            let content;
+            try {
+              content = await fs.readFileFull(rel);
+            } catch {
+              continue;
+            }
+            if (content.includes("\0")) continue;
+            const lines = content.split("\n");
+            for (let i = 0; i < lines.length; i++) {
+              if (re.test(lines[i])) {
+                out.push(
+                  `${rel}:${i + 1}: ${lines[i].trim().slice(0, 300)}`
+                );
+                if (out.length >= SEARCH_MAX_MATCHES) {
+                  truncated = true;
+                  break outer;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          const m = msg(err);
+          warn(`search_files failed: ${m}`);
+          return `Error: ${m}`;
+        }
+        if (out.length === 0) return `No matches for /${pattern}/.`;
+        return out.join("\n") + (truncated ? `
+\u2026[truncated at ${SEARCH_MAX_MATCHES} matches]` : "");
+      }
+    }),
+    tool2({
+      name: "glob",
+      description: "List files whose path matches a glob pattern (e.g. '**/*.ts', 'src/**/*.test.ts'), recursively under the working directory (.git and node_modules skipped). Supports *, ?, and ** (crossing directories). Returns matching paths, sorted. Use to discover files by name/extension before reading.",
+      parameters: {
+        pattern: z2.string().describe("Glob pattern to match against file paths."),
+        path: z2.string().default(".").describe(
+          "Subdirectory to search under (default '.'); the pattern matches paths relative to it."
+        )
+      },
+      implementation: async ({ pattern, path }, { status, warn }) => {
+        status(`Globbing ${pattern}`);
+        const globRe = globToRegExp(pattern);
+        const base = path === "." ? "" : path.replace(/\/+$/, "") + "/";
+        const hits = [];
+        let truncated = false;
+        try {
+          for await (const rel of fs.walk(path)) {
+            const relBase = base && rel.startsWith(base) ? rel.slice(base.length) : rel;
+            if (globRe.test(relBase)) {
+              hits.push(rel);
+              if (hits.length >= GLOB_MAX_RESULTS) {
+                truncated = true;
+                break;
+              }
+            }
+          }
+        } catch (err) {
+          const m = msg(err);
+          warn(`glob failed: ${m}`);
+          return `Error: ${m}`;
+        }
+        if (hits.length === 0) return `No files match ${pattern}.`;
+        hits.sort();
+        return hits.join("\n") + (truncated ? `
+\u2026[truncated at ${GLOB_MAX_RESULTS}]` : "");
+      }
+    }),
+    tool2({
+      name: "move_file",
+      description: "Move or rename a file or directory within the working directory. Both paths are relative; '..' escapes are rejected. Missing parent directories of the destination are created, and an existing destination is overwritten.",
+      parameters: {
+        from: z2.string().describe("Existing relative path."),
+        to: z2.string().describe("New relative path.")
+      },
+      implementation: async ({ from, to }, { status, warn }) => {
+        status(`Moving ${from} \u2192 ${to}`);
+        try {
+          await fs.move(from, to);
+          return `Moved ${from} \u2192 ${to}.`;
+        } catch (err) {
+          const m = msg(err);
+          warn(`move_file failed: ${m}`);
+          return `Error: ${m}`;
+        }
+      }
+    }),
+    tool2({
+      name: "delete_file",
+      description: "Delete a file, or a directory and all its contents, within the working directory. Relative paths only; '..' escapes are rejected; refuses to delete the root itself. Irreversible \u2014 there is no trash.",
+      parameters: {
+        path: z2.string().describe("Relative path to delete.")
+      },
+      implementation: async ({ path }, { status, warn }) => {
+        status(`Deleting ${path}`);
+        try {
+          if (!await fs.exists(path)) return `Error: ${path} does not exist.`;
+          await fs.remove(path);
+          return `Deleted ${path}.`;
+        } catch (err) {
+          const m = msg(err);
+          warn(`delete_file failed: ${m}`);
+          return `Error: ${m}`;
+        }
+      }
+    }),
+    tool2({
+      name: "make_dir",
+      description: "Create a directory (and any missing parents) within the working directory. Relative paths only; '..' escapes are rejected.",
+      parameters: {
+        path: z2.string().describe("Relative directory path to create.")
+      },
+      implementation: async ({ path }, { status, warn }) => {
+        status(`Creating ${path}/`);
+        try {
+          await fs.mkdir(path);
+          return `Created ${path}/.`;
+        } catch (err) {
+          const m = msg(err);
+          warn(`make_dir failed: ${m}`);
+          return `Error: ${m}`;
+        }
+      }
+    }),
+    tool2({
+      name: "stat_path",
+      description: "Report whether a path exists and whether it is a file or directory, with its size in bytes and last-modified time. Relative paths only.",
+      parameters: {
+        path: z2.string().describe("Relative path to inspect.")
+      },
+      implementation: async ({ path }, { status, warn }) => {
+        status(`Stat ${path}`);
+        try {
+          const s = await fs.stat(path);
+          return `${path}: ${s.type}, ${s.size} bytes, modified ${new Date(s.mtimeMs).toISOString()}`;
+        } catch (err) {
+          if (err?.code === "ENOENT")
+            return `${path}: does not exist.`;
+          const m = msg(err);
+          warn(`stat_path failed: ${m}`);
           return `Error: ${m}`;
         }
       }

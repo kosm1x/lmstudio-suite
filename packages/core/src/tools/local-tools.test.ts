@@ -138,3 +138,120 @@ describe("edit_file", () => {
     expect(r).toMatch(/Error:/);
   });
 });
+
+describe("search_files", () => {
+  it("finds matches across nested dirs as path:line: text, skipping ignored dirs", async () => {
+    await seed("a.ts", "const x = 1;\nconst NEEDLE = 2;");
+    await fsp.mkdir(join(root, "sub"), { recursive: true });
+    await seed("sub/b.ts", "// NEEDLE here too");
+    await fsp.mkdir(join(root, "node_modules"), { recursive: true });
+    await seed("node_modules/c.ts", "NEEDLE should be ignored");
+    const r = await call("search_files", { pattern: "NEEDLE" });
+    expect(r).toMatch(/a\.ts:2: const NEEDLE = 2;/);
+    expect(r).toMatch(/sub\/b\.ts:1:/);
+    expect(r).not.toMatch(/node_modules/);
+  });
+
+  it("restricts to a glob and reports no matches cleanly", async () => {
+    await seed("a.ts", "NEEDLE");
+    await seed("a.md", "NEEDLE");
+    const r = await call("search_files", {
+      pattern: "NEEDLE",
+      glob: "**/*.md",
+    });
+    expect(r).toMatch(/a\.md:1:/);
+    expect(r).not.toMatch(/a\.ts/);
+    expect(await call("search_files", { pattern: "ZZZ" })).toMatch(
+      /No matches/,
+    );
+  });
+
+  it("returns a clear error on an invalid regex", async () => {
+    await seed("a.ts", "x");
+    expect(await call("search_files", { pattern: "(" })).toMatch(
+      /invalid regular expression/,
+    );
+  });
+
+  it("caps output at 200 matches with a truncation marker", async () => {
+    await seed(
+      "big.txt",
+      Array.from({ length: 250 }, () => "NEEDLE").join("\n"),
+    );
+    const r = await call("search_files", { pattern: "NEEDLE" });
+    expect(r.split("\n").filter((l) => l.includes("NEEDLE")).length).toBe(200);
+    expect(r).toMatch(/truncated at 200 matches/);
+  });
+
+  it("skips binary files (NUL byte)", async () => {
+    await seed("bin", "NEEDLE" + String.fromCharCode(0) + "more");
+    expect(await call("search_files", { pattern: "NEEDLE" })).toMatch(
+      /No matches/,
+    );
+  });
+
+  it("interprets the glob relative to the search base, consistently with glob()", async () => {
+    await fsp.mkdir(join(root, "src"), { recursive: true });
+    await seed("src/a.ts", "NEEDLE");
+    // Same path+glob that the glob() tool would accept must also work here.
+    const r = await call("search_files", {
+      pattern: "NEEDLE",
+      path: "src",
+      glob: "*.ts",
+    });
+    expect(r).toMatch(/src\/a\.ts:1:/);
+  });
+});
+
+describe("glob", () => {
+  it("lists matching files sorted, root-relative", async () => {
+    await seed("a.ts", "1");
+    await fsp.mkdir(join(root, "src"), { recursive: true });
+    await seed("src/b.ts", "2");
+    await seed("src/c.js", "3");
+    const r = await call("glob", { pattern: "**/*.ts" });
+    expect(r.split("\n")).toEqual(["a.ts", "src/b.ts"]);
+  });
+
+  it("matches relative to a base path", async () => {
+    await fsp.mkdir(join(root, "src"), { recursive: true });
+    await seed("src/b.ts", "2");
+    await seed("src/c.ts", "3");
+    const r = await call("glob", { pattern: "*.ts", path: "src" });
+    expect(r.split("\n").sort()).toEqual(["src/b.ts", "src/c.ts"]);
+  });
+});
+
+describe("file ops", () => {
+  it("make_dir / move_file / stat_path / delete_file round-trip", async () => {
+    expect(await call("make_dir", { path: "d" })).toMatch(/Created d\//);
+    await seed("d/x.txt", "hi");
+    expect(await call("stat_path", { path: "d/x.txt" })).toMatch(
+      /d\/x\.txt: file, 2 bytes/,
+    );
+    expect(await call("move_file", { from: "d/x.txt", to: "d/y.txt" })).toMatch(
+      /Moved/,
+    );
+    expect(await read("d/y.txt")).toBe("hi");
+    expect(await call("delete_file", { path: "d/y.txt" })).toMatch(/Deleted/);
+    expect(await call("stat_path", { path: "d/y.txt" })).toMatch(
+      /does not exist/,
+    );
+  });
+
+  it("delete_file reports a clear error on a missing path", async () => {
+    expect(await call("delete_file", { path: "ghost" })).toMatch(
+      /does not exist/,
+    );
+  });
+
+  it("file ops reject paths that escape the root", async () => {
+    expect(await call("make_dir", { path: "../evil" })).toMatch(/Error:/);
+    expect(await call("delete_file", { path: "../evil" })).toMatch(
+      /Error:|does not exist/,
+    );
+    expect(await call("move_file", { from: "a", to: "../evil" })).toMatch(
+      /Error:/,
+    );
+  });
+});

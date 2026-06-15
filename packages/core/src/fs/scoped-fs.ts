@@ -24,6 +24,20 @@ export interface DirEntry {
   type: DirEntryType;
 }
 
+export interface StatInfo {
+  type: DirEntryType;
+  /** Size in bytes. */
+  size: number;
+  /** Last-modified time, ms since epoch. */
+  mtimeMs: number;
+}
+
+/** Directory names skipped by `walk` unless overridden. */
+export const DEFAULT_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  ".git",
+  "node_modules",
+]);
+
 export class PathEscapeError extends Error {
   constructor(p: string) {
     super(`Path escapes the allowed root directory: ${p}`);
@@ -124,6 +138,47 @@ export class ScopedFs {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** Type + size + mtime for a path. Throws (ENOENT) if it does not exist. */
+  async stat(relPath: string): Promise<StatInfo> {
+    const s = await fsp.stat(this.resolvePath(relPath));
+    return {
+      type: s.isDirectory() ? "dir" : s.isFile() ? "file" : "other",
+      size: s.size,
+      mtimeMs: s.mtimeMs,
+    };
+  }
+
+  /**
+   * Recursively yield file paths (relative to root, POSIX-separated `/`) under
+   * `relPath`. Yields files only; directories whose name is in `ignore` are
+   * pruned. Symlinks are not followed, and unreadable directories are skipped
+   * rather than throwing. Iteration order is unspecified — sort if you need it.
+   */
+  async *walk(
+    relPath = ".",
+    options: { ignore?: ReadonlySet<string> } = {},
+  ): AsyncGenerator<string> {
+    const ignore = options.ignore ?? DEFAULT_IGNORE_DIRS;
+    const stack: string[] = [this.resolvePath(relPath)];
+    while (stack.length > 0) {
+      const dir = stack.pop() as string;
+      let entries;
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue; // unreadable directory → skip
+      }
+      for (const e of entries) {
+        const abs = resolve(dir, e.name);
+        if (e.isDirectory()) {
+          if (!ignore.has(e.name)) stack.push(abs);
+        } else if (e.isFile()) {
+          yield relative(this.root, abs).split(sep).join("/");
+        }
+      }
     }
   }
 

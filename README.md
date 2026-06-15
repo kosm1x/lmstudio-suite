@@ -54,7 +54,7 @@ lmstudio-suite/
 │   │       ├── kb/           frontmatter + [[links]] graph + map digest ✅
 │   │       └── tools/        shared SDK tool() builders (web/fs/shell/map) ✅
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url)
-│   ├── plugin-local/         ✅ Tools Provider (read/write/edit/list_dir + opt-in run_shell)
+│   ├── plugin-local/         ✅ Tools Provider (read/write/edit/search/glob/file-ops + opt-in run_shell)
 │   ├── plugin-memory/        ✅ Prompt Preprocessor (RAG over a knowledge dir)
 │   ├── plugin-kbmap/         ✅ Preprocessor + Tools Provider (map memory over a KB)
 │   ├── plugin-reasoning/     ✅ Prompt Preprocessor (chain-of-thought scaffolding)
@@ -105,7 +105,7 @@ npm start -w @lmstudio-suite/agent-cli -- "Find the latest LM Studio release and
 # web search backend via env: SEARCH_PROVIDER, SEARCH_API_KEY, SEARXNG_URL
 ```
 
-The agent always has `web_search`, `fetch_url`, `read_file`, `write_file`, `edit_file`, `list_dir`; `--shell` adds `run_shell`.
+The agent always has `web_search`, `fetch_url`, `read_file`, `write_file`, `edit_file`, `search_files`, `glob`, `list_dir`, `stat_path`, `move_file`, `make_dir`, `delete_file`; `--shell` adds `run_shell`.
 
 ## Develop
 

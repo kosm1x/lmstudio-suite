@@ -59,7 +59,7 @@ Highest ROI; no new plugins. Goal: precise editing + retrieval + safe file ops +
   and a >1MB regression. qa-auditor PASS; manifest → rev 2.
 - **Deferred:** line-range mode (kept one unambiguous mode); revisit if models ask for it.
 
-### 1.2 `search_files` (content search)
+### 1.2 `search_files` (content search) ✅ DONE
 
 - **Files:** `core/src/tools/local-tools.ts` (+ test). Implement a regex walk under
   `ScopedFs` (respect a sane ignore list: `.git`, `node_modules`); cap matches + bytes.
@@ -67,12 +67,12 @@ Highest ROI; no new plugins. Goal: precise editing + retrieval + safe file ops +
   `path:line: match` lines, truncation-marked.
 - **Done when:** finds matches across nested dirs, honors ignore list, caps output.
 
-### 1.3 `glob` / `find`
+### 1.3 `glob` / `find` ✅ DONE
 
 - **Files:** `core/src/tools/local-tools.ts` (+ test). Glob match (e.g. `**/*.ts`) under
   the scoped root, sorted, capped.
 
-### 1.4 File ops: `move`, `delete`, `mkdir`, `stat`
+### 1.4 File ops: `move`, `delete`, `mkdir`, `stat` ✅ DONE
 
 - **Files:** extend `core/src/fs/scoped-fs.ts` with the primitives (+ test), then thin
   tool wrappers in `local-tools.ts`. `delete`/`move` must reject `..` escapes (already

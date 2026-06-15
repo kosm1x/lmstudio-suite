@@ -7,6 +7,10 @@ import { LMStudioClient } from "@lmstudio/sdk";
 import { promises as fsp } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+var DEFAULT_IGNORE_DIRS = /* @__PURE__ */ new Set([
+  ".git",
+  "node_modules"
+]);
 var PathEscapeError = class extends Error {
   constructor(p) {
     super(`Path escapes the allowed root directory: ${p}`);
@@ -97,6 +101,42 @@ var ScopedFs = class {
       return true;
     } catch {
       return false;
+    }
+  }
+  /** Type + size + mtime for a path. Throws (ENOENT) if it does not exist. */
+  async stat(relPath) {
+    const s = await fsp.stat(this.resolvePath(relPath));
+    return {
+      type: s.isDirectory() ? "dir" : s.isFile() ? "file" : "other",
+      size: s.size,
+      mtimeMs: s.mtimeMs
+    };
+  }
+  /**
+   * Recursively yield file paths (relative to root, POSIX-separated `/`) under
+   * `relPath`. Yields files only; directories whose name is in `ignore` are
+   * pruned. Symlinks are not followed, and unreadable directories are skipped
+   * rather than throwing. Iteration order is unspecified — sort if you need it.
+   */
+  async *walk(relPath = ".", options = {}) {
+    const ignore = options.ignore ?? DEFAULT_IGNORE_DIRS;
+    const stack = [this.resolvePath(relPath)];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      let entries;
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        const abs = resolve(dir, e.name);
+        if (e.isDirectory()) {
+          if (!ignore.has(e.name)) stack.push(abs);
+        } else if (e.isFile()) {
+          yield relative(this.root, abs).split(sep).join("/");
+        }
+      }
     }
   }
   async mkdir(relPath) {
