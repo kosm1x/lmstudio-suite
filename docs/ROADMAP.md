@@ -87,7 +87,7 @@ Highest ROI; no new plugins. Goal: precise editing + retrieval + safe file ops +
 - Truncate stdout/stderr to a byte cap; add an optional allow/deny command policy
   (`ShellToolOptions`) surfaced as a `plugin-local` config field.
 
-### 1.6 CI
+### 1.6 CI ✅ DONE
 
 - **Files:** new `.github/workflows/ci.yml`.
 - Run on push/PR: `npm ci`, `npm run typecheck`, `npx vitest run`, `npm run package:plugins`
