@@ -98,17 +98,17 @@ move/delete/mkdir/stat + hardened shell; CI green on the branch.
 
 ---
 
-## Phase 2 — `data-tools` plugin (new capability class)
+## Phase 2 — `data-tools` plugin (new capability class) ✅ DONE
 
 Deterministic data + math so the model stops doing it in its head.
 
-### 2.1 Scaffold
+### 2.1 Scaffold ✅ DONE
 
 - **Files:** new `packages/plugin-data/` (mirror `plugin-local` layout: `src/index.ts`,
   `config.ts`, `manifest.json`, `package.json`, `tsconfig.json`, `README.md`).
 - Add `data-tools.ts` to `core/src/tools/` and export it from `core/src/tools/index.ts`.
 
-### 2.2 Tools
+### 2.2 Tools ✅ DONE
 
 - **`calculator`** — safe arithmetic expression eval (no `eval`; use a small parser or a
   vetted dep kept external/inlined per packaging rules).
@@ -117,7 +117,7 @@ Deterministic data + math so the model stops doing it in its head.
 - **`read_csv`** — column select + filter + simple aggregate; cap rows.
 - All file inputs go through `ScopedFs`.
 
-### 2.3 Wire-up
+### 2.3 Wire-up ✅ DONE
 
 - Expose via `plugin-data` and add to `agent-cli` behind a `--data` flag.
 

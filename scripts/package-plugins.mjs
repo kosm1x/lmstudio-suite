@@ -36,6 +36,7 @@ const PLUGINS = [
   "plugin-memory",
   "plugin-reasoning",
   "plugin-kbmap",
+  "plugin-data",
 ];
 
 // Keep in lockstep with the workspace. zod must match @lmstudio/sdk's peer (^3).

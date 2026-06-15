@@ -1,0 +1,16 @@
+{
+  "name": "lms-plugin-data-tools",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "lms dev",
+    "push": "lms push"
+  },
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0"
+  }
+}

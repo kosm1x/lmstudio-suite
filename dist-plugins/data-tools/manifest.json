@@ -1,0 +1,14 @@
+{
+  "name": "data-tools",
+  "owner": "kosmix",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": [
+    "tools",
+    "data",
+    "csv",
+    "json",
+    "sqlite"
+  ]
+}

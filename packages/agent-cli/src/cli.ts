@@ -8,6 +8,7 @@
 import type { ChatMessage, Tool } from "@lmstudio/sdk";
 import {
   createClient,
+  createDataTools,
   createFsTools,
   createMapTools,
   createShellTool,
@@ -43,6 +44,7 @@ async function run(): Promise<void> {
     ...createFsTools({ root: args.cwd }),
   ];
   if (args.shell) tools.push(createShellTool({ cwd: args.cwd }));
+  if (args.data) tools.push(...createDataTools({ root: args.cwd }));
 
   if (args.kb) {
     const kbRoot = args.kb;

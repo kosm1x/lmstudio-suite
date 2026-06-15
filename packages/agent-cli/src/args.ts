@@ -9,6 +9,8 @@ export interface CliArgs {
   shell: boolean;
   /** Knowledge-base directory for the map-memory tools (absolute). */
   kb?: string;
+  /** Expose the data tools (calculator / json / csv / sqlite). */
+  data: boolean;
   help: boolean;
 }
 
@@ -18,6 +20,7 @@ export function parseArgs(argv: string[]): CliArgs {
     cwd: process.cwd(),
     maxRounds: 8,
     shell: false,
+    data: false,
     help: false,
   };
   const positional: string[] = [];
@@ -41,6 +44,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case "--shell":
         args.shell = true;
+        break;
+      case "--data":
+        args.data = true;
         break;
       case "--help":
       case "-h":
@@ -67,6 +73,7 @@ Options:
       --max-rounds <n> Max agent prediction rounds (default: 8)
       --shell          Enable the run_shell tool (off by default)
       --kb <dir>       Knowledge-base dir to expose as map-memory tools
+      --data           Enable the data tools (calculator / json / csv / sqlite)
   -h, --help           Show this help
 
 Environment (web search):
