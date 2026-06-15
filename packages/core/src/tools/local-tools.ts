@@ -5,7 +5,11 @@
 import { tool, type Tool } from "@lmstudio/sdk";
 import { z } from "zod";
 import { ScopedFs, globToRegExp } from "../fs/index";
-import { runShell } from "../exec/index";
+import {
+  runShell,
+  checkCommandPolicy,
+  type CommandPolicy,
+} from "../exec/index";
 
 /** Caps for the recursive search/glob tools, to keep output model-sized. */
 const SEARCH_MAX_MATCHES = 200;
@@ -378,29 +382,45 @@ export interface ShellToolOptions {
   cwd: string;
   /** Kill commands after this many ms (default 30000). */
   timeoutMs?: number;
+  /** Cap on captured stdout/stderr bytes each (default 100000). */
+  maxOutputBytes?: number;
+  /**
+   * Optional allow/deny command policy (a guardrail, not a sandbox). When set,
+   * a violating command is refused before it runs.
+   */
+  policy?: CommandPolicy;
 }
 
 export function createShellTool(options: ShellToolOptions): Tool {
   const timeoutMs = options.timeoutMs ?? 30_000;
+  const policy = options.policy ?? {};
   return tool({
     name: "run_shell",
     description:
       "Run a shell command in the working directory and return its exit code, stdout, and stderr. " +
-      "Use for builds, tests, git, or file tooling.",
+      "Use for builds, tests, git, or file tooling. The operator may restrict which commands are " +
+      "allowed; a blocked command is refused without running.",
     parameters: {
       command: z.string().describe("The shell command line to execute."),
     },
     implementation: async ({ command }, { status, warn, signal }) => {
+      const denial = checkCommandPolicy(command, policy);
+      if (denial) {
+        warn(`run_shell refused: ${denial}`);
+        return `Error: command refused by policy — ${denial}.`;
+      }
       status(`$ ${command}`);
       const r = await runShell(command, {
         cwd: options.cwd,
         timeoutMs,
+        maxOutputBytes: options.maxOutputBytes,
         signal,
       });
       if (r.timedOut) warn(`run_shell timed out after ${timeoutMs}ms`);
       const parts = [`exit: ${r.timedOut ? "timed out" : r.exitCode}`];
       if (r.stdout) parts.push(`stdout:\n${r.stdout}`);
       if (r.stderr) parts.push(`stderr:\n${r.stderr}`);
+      if (r.truncated) parts.push("[output truncated at the byte cap]");
       return parts.join("\n\n");
     },
   });

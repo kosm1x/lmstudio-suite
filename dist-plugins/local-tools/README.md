@@ -30,9 +30,11 @@ If left blank, it uses LM Studio's auto per-chat working directory, falling back
 
 - **Enable run_shell** — off by default. When on, the model can run shell commands in the working directory.
 - **Shell command timeout (ms)** — commands are killed past this (default 30000).
+- **Shell deny list** — command names `run_shell` always refuses (e.g. `rm`, `shutdown`). Matched against the leading executable of each pipeline segment, by basename.
+- **Shell allow list** — if non-empty, only these command names may run (e.g. `git`, `npm`, `node`). Empty = allow anything not denied.
 
 ## Safety
 
-File access is confined to the working directory by a path-traversal guard. `run_shell` is **resource-bounded** (timeout, output cap, scoped cwd) but **not a security sandbox** — a command runs with your user account's privileges. Leave `run_shell` off unless you trust the model and the task.
+File access is confined to the working directory by a path-traversal guard. `run_shell` is **resource-bounded** (timeout, output cap, scoped cwd) and supports an optional allow/deny **command policy** — but it is **not a security sandbox**. The policy is a guardrail: a shell can always obfuscate intent (`sh -c …`, subshells, `eval`), and a command runs with your user account's privileges. Leave `run_shell` off, or set an allow list, unless you trust the model and the task.
 
 MIT licensed.

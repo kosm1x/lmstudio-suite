@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFsTools } from "./local-tools";
+import { createFsTools, createShellTool } from "./local-tools";
+import type { CommandPolicy } from "../exec/index";
 
 const ctx = {
   status: () => {},
@@ -253,5 +254,25 @@ describe("file ops", () => {
     expect(await call("move_file", { from: "a", to: "../evil" })).toMatch(
       /Error:/,
     );
+  });
+});
+
+describe("run_shell policy", () => {
+  const callShell = async (command: string, policy?: CommandPolicy) => {
+    const t = createShellTool({ cwd: root, policy });
+    return (await t.implementation({ command }, ctx)) as string;
+  };
+
+  it("refuses a denied command without running it", async () => {
+    const r = await callShell("rm -rf .", { deny: ["rm"] });
+    expect(r).toMatch(/refused by policy/);
+    // the directory still exists → nothing ran
+    expect(await fsp.readdir(root)).toBeDefined();
+  });
+
+  it("runs a command permitted by the allow list", async () => {
+    const r = await callShell("echo hello", { allow: ["echo"] });
+    expect(r).toMatch(/exit: 0/);
+    expect(r).toMatch(/hello/);
   });
 });

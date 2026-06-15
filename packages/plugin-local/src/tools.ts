@@ -43,7 +43,14 @@ export async function toolsProvider(
   const tools = createFsTools({ root });
   if (chat.get("enableShell")) {
     tools.push(
-      createShellTool({ cwd: root, timeoutMs: chat.get("commandTimeoutMs") }),
+      createShellTool({
+        cwd: root,
+        timeoutMs: chat.get("commandTimeoutMs"),
+        policy: {
+          allow: chat.get("shellAllow"),
+          deny: chat.get("shellDeny"),
+        },
+      }),
     );
   }
   return tools;

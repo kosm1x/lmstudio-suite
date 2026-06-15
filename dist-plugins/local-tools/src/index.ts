@@ -31,6 +31,22 @@ var chatConfigSchematics = createConfigSchematics().field(
     max: 6e5
   },
   3e4
+).field(
+  "shellDeny",
+  "stringArray",
+  {
+    displayName: "Shell deny list",
+    hint: "Command names (e.g. rm, shutdown) that run_shell always refuses. Matched against the leading executable of each pipeline segment, by basename. A guardrail, not a sandbox."
+  },
+  []
+).field(
+  "shellAllow",
+  "stringArray",
+  {
+    displayName: "Shell allow list",
+    hint: "If non-empty, run_shell only permits these command names (e.g. git, npm, node). Leave empty to allow anything not on the deny list."
+  },
+  []
 ).build();
 
 // packages/plugin-local/src/tools.ts
@@ -332,6 +348,38 @@ ${String(err)}`),
   });
 }
 
+// packages/core/src/exec/policy.ts
+import { basename } from "node:path";
+function commandHeads(command) {
+  return command.split(/[|&;\n]+/).map((seg) => seg.trim()).filter(Boolean).map((seg) => {
+    const tokens = seg.split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) {
+      i++;
+    }
+    const head = tokens[i] ?? "";
+    return head ? basename(head) : "";
+  }).filter(Boolean);
+}
+function checkCommandPolicy(command, policy) {
+  const allow = policy.allow ?? [];
+  const deny = policy.deny ?? [];
+  if (allow.length === 0 && deny.length === 0) return null;
+  const heads = commandHeads(command);
+  if (heads.length === 0) return null;
+  const denied = heads.filter((h) => deny.includes(h));
+  if (denied.length > 0) {
+    return `command(s) on the deny list: ${[...new Set(denied)].join(", ")}`;
+  }
+  if (allow.length > 0) {
+    const notAllowed = heads.filter((h) => !allow.includes(h));
+    if (notAllowed.length > 0) {
+      return `only [${allow.join(", ")}] are allowed (saw: ${[...new Set(notAllowed)].join(", ")})`;
+    }
+  }
+  return null;
+}
+
 // packages/core/src/tools/web-tools.ts
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
@@ -623,17 +671,24 @@ function createFsTools(options) {
 }
 function createShellTool(options) {
   const timeoutMs = options.timeoutMs ?? 3e4;
+  const policy = options.policy ?? {};
   return tool2({
     name: "run_shell",
-    description: "Run a shell command in the working directory and return its exit code, stdout, and stderr. Use for builds, tests, git, or file tooling.",
+    description: "Run a shell command in the working directory and return its exit code, stdout, and stderr. Use for builds, tests, git, or file tooling. The operator may restrict which commands are allowed; a blocked command is refused without running.",
     parameters: {
       command: z2.string().describe("The shell command line to execute.")
     },
     implementation: async ({ command }, { status, warn, signal }) => {
+      const denial = checkCommandPolicy(command, policy);
+      if (denial) {
+        warn(`run_shell refused: ${denial}`);
+        return `Error: command refused by policy \u2014 ${denial}.`;
+      }
       status(`$ ${command}`);
       const r = await runShell(command, {
         cwd: options.cwd,
         timeoutMs,
+        maxOutputBytes: options.maxOutputBytes,
         signal
       });
       if (r.timedOut) warn(`run_shell timed out after ${timeoutMs}ms`);
@@ -642,6 +697,7 @@ function createShellTool(options) {
 ${r.stdout}`);
       if (r.stderr) parts.push(`stderr:
 ${r.stderr}`);
+      if (r.truncated) parts.push("[output truncated at the byte cap]");
       return parts.join("\n\n");
     }
   });
@@ -673,7 +729,14 @@ async function toolsProvider(ctl) {
   const tools = createFsTools({ root });
   if (chat.get("enableShell")) {
     tools.push(
-      createShellTool({ cwd: root, timeoutMs: chat.get("commandTimeoutMs") })
+      createShellTool({
+        cwd: root,
+        timeoutMs: chat.get("commandTimeoutMs"),
+        policy: {
+          allow: chat.get("shellAllow"),
+          deny: chat.get("shellDeny")
+        }
+      })
     );
   }
   return tools;

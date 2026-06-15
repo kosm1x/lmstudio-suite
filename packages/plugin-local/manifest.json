@@ -3,6 +3,6 @@
   "owner": "kosmix",
   "type": "plugin",
   "runner": "node",
-  "revision": 3,
+  "revision": 4,
   "tags": ["tools", "filesystem", "shell"]
 }

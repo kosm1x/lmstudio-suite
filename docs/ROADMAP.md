@@ -81,7 +81,7 @@ Highest ROI; no new plugins. Goal: precise editing + retrieval + safe file ops +
   `exists` — added for kb-map); only `stat` is missing. This task is largely the thin
   `tool()` wrappers + tests, not new fs code.
 
-### 1.5 Harden `run_shell`
+### 1.5 Harden `run_shell` ✅ DONE
 
 - **Files:** `core/src/exec/run.ts`, `core/src/tools/local-tools.ts`.
 - Truncate stdout/stderr to a byte cap; add an optional allow/deny command policy
