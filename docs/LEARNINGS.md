@@ -99,9 +99,25 @@ The plugins import the unpublished workspace package `@lmstudio-suite/core`, so 
   "expected tool appeared once" lets a model that calls _everything_ score 100%. Since the tasks are
   read-only, failing any task where a _mutating_ tool was called (plus stronger arg validators) makes
   the metric measure selection, not coverage.
+- **A meta-plugin only subsumes Tools Providers — not preprocessors or generators.** `toolkit`
+  composes every `core/tools` group behind per-chat toggles, so it can replace the plugins that are
+  _pure_ `withToolsProvider` (`web-tools`, `local-tools`, `data-tools`). It **cannot** replace
+  `reasoning` (`withPromptPreprocessor`), `calc-generator` (`withGenerator`), or the _injection_ half
+  of `memory` / `kb-map` (those are preprocessor + tools — `toolkit` carries their tools but not their
+  always-on prompt injection). The dividing line is the SDK hook, not the feature: a tools provider has
+  no way to rewrite the prompt or replace the token source, so anything riding a different hook stays a
+  separate plugin. (User-facing keep/drop guidance lives in the README.)
+- **Adding a workspace package means re-running `npm install`.** A new `packages/*` workspace must be
+  registered in the root `package-lock.json`, but `typecheck` / `vitest` / `package:plugins` all reuse
+  the existing `node_modules` and never notice the drift — only `npm ci` does, which is exactly what CI
+  runs. We added four workspaces and CI went red on the install step (`npm ci` refuses a lockfile that
+  doesn't list every workspace). Fix: `npm install` to resync the lockfile, commit it, CI greens. Run
+  `npm install` (not just the test trio) whenever you add a workspace, or CI is the first thing to tell
+  you.
 
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).
 - Raw files: `https://lmstudio.ai/<owner>/<name>/files/<path>` serves uploaded content directly.
 - In-app: the LM Studio **Developer Logs** show `Plugin(<owner>/<name>) … Register with LM Studio` on a clean load, and surface load/runtime errors.
+- **A built artifact "missing" on the publish machine is usually a stale checkout, not a push problem.** `dist-plugins/` is git-ignored, but the bundles are **force-committed** (`git add -f`) so any machine gets push-ready dirs via `git pull` — no local rebuild needed. When a freshly built plugin's dir didn't exist on the Mac (`cd dist-plugins/<name>` → "no such file"), the cause was a checkout that predated the commit, not a bad bundle or an `lms` bug. `git checkout main && git pull` fixed it. When a force-committed gitignored artifact appears to be missing on another machine, suspect the checkout before the tool.
