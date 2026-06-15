@@ -1,0 +1,12 @@
+{
+  "name": "calc-generator",
+  "owner": "kosmix",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": [
+    "generator",
+    "example",
+    "calculator"
+  ]
+}

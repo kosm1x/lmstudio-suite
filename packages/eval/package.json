@@ -1,0 +1,14 @@
+{
+  "name": "@lmstudio-suite/eval",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tool-call eval harness: scores whether a loaded LM Studio model calls the right tool with valid args.",
+  "scripts": {
+    "start": "tsx src/run.ts"
+  },
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}

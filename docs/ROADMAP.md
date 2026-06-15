@@ -168,7 +168,7 @@ write path — the design completion noted in LEARNINGS.
 
 ---
 
-## Phase 5 — Orchestration, safety & evaluation (the "suite" layer)
+## Phase 5 — Orchestration, safety & evaluation (the "suite" layer) ✅ DONE
 
 ### 5.1 `toolkit` meta-plugin ✅ DONE
 
@@ -182,14 +182,14 @@ write path — the design completion noted in LEARNINGS.
   (`require_approval`); CLI: interactive prompt + `--yes` to bypass. Threaded through the
   tool `implementation` via options, not duplicated per tool.
 
-### 5.3 Tool-call eval harness
+### 5.3 Tool-call eval harness ✅ DONE
 
 - **Files:** new `packages/eval/` (SDK app).
 - A scripted set of `.act()` tasks scoring whether a loaded model calls the **right tool
   with valid args**. Output a per-model scorecard. This is the suite's differentiator:
   help users pick a reliable LM Studio tool model, not just feed one.
 
-### 5.4 Generator surface
+### 5.4 Generator surface ✅ DONE
 
 - Deliver the README-promised `withGenerator` example (`packages/plugin-generator/` or a
   CLI demo) — currently listed but unbuilt.

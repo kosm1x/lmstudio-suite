@@ -1,0 +1,12 @@
+{
+  "name": "@lmstudio-suite/plugin-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio Generator plugin example: a deterministic calculator that replaces the LLM as the token source.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}

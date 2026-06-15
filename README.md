@@ -62,7 +62,9 @@ lmstudio-suite/
 │   ├── plugin-reasoning/     ✅ Prompt Preprocessor (chain-of-thought scaffolding)
 │   ├── plugin-data/          ✅ Tools Provider (calculator + json/csv readers + read-only sqlite)
 │   ├── plugin-toolkit/       ✅ Meta-plugin (all groups via per-chat toggles)
-│   └── agent-cli/            ✅ Standalone .act() agent (composes all tools; --approve / --trace)
+│   ├── plugin-generator/     ✅ Generator example (calculator replaces the LLM)
+│   ├── agent-cli/            ✅ Standalone .act() agent (composes all tools; --approve / --trace)
+│   └── eval/                 ✅ Tool-call eval harness (per-model scorecard)
 └──
 ```
 
