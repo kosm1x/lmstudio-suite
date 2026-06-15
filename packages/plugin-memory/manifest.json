@@ -3,6 +3,6 @@
   "owner": "kosmix",
   "type": "plugin",
   "runner": "node",
-  "revision": 1,
-  "tags": ["rag", "memory", "retrieval", "prompt-preprocessor"]
+  "revision": 2,
+  "tags": ["rag", "memory", "retrieval", "prompt-preprocessor", "tools"]
 }

@@ -36,4 +36,22 @@ export const chatConfigSchematics = createConfigSchematics()
     },
     30_000,
   )
+  .field(
+    "shellDeny",
+    "stringArray",
+    {
+      displayName: "Shell deny list",
+      hint: "Command names (e.g. rm, shutdown) that run_shell always refuses. Matched against the leading executable of each pipeline segment, by basename. A guardrail, not a sandbox.",
+    },
+    [],
+  )
+  .field(
+    "shellAllow",
+    "stringArray",
+    {
+      displayName: "Shell allow list",
+      hint: "If non-empty, run_shell only permits these command names (e.g. git, npm, node). Leave empty to allow anything not on the deny list.",
+    },
+    [],
+  )
   .build();

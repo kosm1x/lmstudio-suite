@@ -5,7 +5,12 @@ import { LMStudioClient } from "@lmstudio/sdk";
 
 // packages/core/src/fs/scoped-fs.ts
 import { promises as fsp } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+var DEFAULT_IGNORE_DIRS = /* @__PURE__ */ new Set([
+  ".git",
+  "node_modules"
+]);
 var PathEscapeError = class extends Error {
   constructor(p) {
     super(`Path escapes the allowed root directory: ${p}`);
@@ -43,11 +48,49 @@ var ScopedFs = class {
       await fh.close();
     }
   }
-  /** Write a file, creating parent directories as needed. */
+  /**
+   * Read the entire file with no truncation cap. Use for edit/transform
+   * operations, where writing back a model-facing (size-capped) read would
+   * silently drop everything past the cap. `readFile` is the capped read.
+   */
+  async readFileFull(relPath) {
+    return fsp.readFile(this.resolvePath(relPath), "utf-8");
+  }
+  /**
+   * Write a file, creating parent directories as needed.
+   *
+   * Atomic: the content is staged to a sibling temp file and renamed into
+   * place, so a crash mid-write leaves the temp file rather than a truncated
+   * original. (rename is atomic within a filesystem; the temp sits in the same
+   * directory as the target, hence the same filesystem.) This matters for
+   * `edit_file`, where a partial write would corrupt existing content.
+   */
   async writeFile(relPath, content) {
     const p = this.resolvePath(relPath);
     await fsp.mkdir(dirname(p), { recursive: true });
-    await fsp.writeFile(p, content, "utf-8");
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, content, "utf-8");
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
+  }
+  /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
+  async writeBytes(relPath, data) {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, data);
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {
+      });
+      throw err;
+    }
   }
   /** Move/rename a file within the root; both ends are traversal-guarded. */
   async move(fromRel, toRel) {
@@ -72,6 +115,42 @@ var ScopedFs = class {
       return true;
     } catch {
       return false;
+    }
+  }
+  /** Type + size + mtime for a path. Throws (ENOENT) if it does not exist. */
+  async stat(relPath) {
+    const s = await fsp.stat(this.resolvePath(relPath));
+    return {
+      type: s.isDirectory() ? "dir" : s.isFile() ? "file" : "other",
+      size: s.size,
+      mtimeMs: s.mtimeMs
+    };
+  }
+  /**
+   * Recursively yield file paths (relative to root, POSIX-separated `/`) under
+   * `relPath`. Yields files only; directories whose name is in `ignore` are
+   * pruned. Symlinks are not followed, and unreadable directories are skipped
+   * rather than throwing. Iteration order is unspecified — sort if you need it.
+   */
+  async *walk(relPath = ".", options = {}) {
+    const ignore = options.ignore ?? DEFAULT_IGNORE_DIRS;
+    const stack = [this.resolvePath(relPath)];
+    while (stack.length > 0) {
+      const dir = stack.pop();
+      let entries;
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        const abs = resolve(dir, e.name);
+        if (e.isDirectory()) {
+          if (!ignore.has(e.name)) stack.push(abs);
+        } else if (e.isFile()) {
+          yield relative(this.root, abs).split(sep).join("/");
+        }
+      }
     }
   }
   async mkdir(relPath) {
@@ -549,14 +628,18 @@ function planIncomingMoves(graph, options = {}) {
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
 
-// packages/core/src/tools/local-tools.ts
+// packages/core/src/tools/http-tools.ts
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
 
-// packages/core/src/tools/map-tools.ts
-import { extname as extname3 } from "node:path";
+// packages/core/src/tools/local-tools.ts
 import { tool as tool3 } from "@lmstudio/sdk";
 import { z as z3 } from "zod";
+
+// packages/core/src/tools/map-tools.ts
+import { extname as extname3 } from "node:path";
+import { tool as tool4 } from "@lmstudio/sdk";
+import { z as z4 } from "zod";
 var msg = (err) => err instanceof Error ? err.message : String(err);
 var WRITABLE_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".markdown", ".txt", ".text"]);
 function createMapTools(options) {
@@ -565,11 +648,11 @@ function createMapTools(options) {
   const digestMaxChars = options.digestMaxChars ?? 4e3;
   const incomingFolder = options.incomingFolder ?? "incoming";
   const tools = [
-    tool3({
+    tool4({
       name: "map_overview",
       description: "Show the knowledge-base map: a compact index of entries (name, path, one-line description, links), grouped by folder. Call with no argument for the whole map, or pass a folder name to list just that folder in full. Start here to see what exists before reading anything.",
       parameters: {
-        folder: z3.string().optional().describe("Optional folder name to expand in full (e.g. 'lessons').")
+        folder: z4.string().optional().describe("Optional folder name to expand in full (e.g. 'lessons').")
       },
       implementation: async ({ folder }, { status }) => {
         status(folder ? `Map of ${folder}/` : "Map overview");
@@ -578,12 +661,12 @@ function createMapTools(options) {
         return folder ? renderFolder(graph, folder) : renderDigest(graph, { root, maxChars: digestMaxChars });
       }
     }),
-    tool3({
+    tool4({
       name: "search_map",
       description: "Search the map by keyword across entry names, paths, descriptions and tags. Unlike the always-on map this also searches archived/warm entries. Returns matching entries with their paths (read one with read_node). Use multiple words to narrow \u2014 every word must match.",
       parameters: {
-        query: z3.string().describe("Keywords to search for."),
-        limit: z3.number().int().min(1).max(50).default(12).describe("Max results (default 12).")
+        query: z4.string().describe("Keywords to search for."),
+        limit: z4.number().int().min(1).max(50).default(12).describe("Max results (default 12).")
       },
       implementation: async ({ query, limit }, { status }) => {
         status(`Searching: ${query}`);
@@ -593,11 +676,11 @@ function createMapTools(options) {
         return hits.map((h) => renderNodeLine(h.node, 3)).join("\n");
       }
     }),
-    tool3({
+    tool4({
       name: "read_node",
       description: "Read the full contents of one entry by its path (the path shown in the map). Use after map_overview/search_map to pull the detail behind a one-line description.",
       parameters: {
-        path: z3.string().describe("Entry path relative to the KB root.")
+        path: z4.string().describe("Entry path relative to the KB root.")
       },
       implementation: async ({ path }, { status, warn }) => {
         status(`Reading ${path}`);
@@ -614,11 +697,11 @@ function createMapTools(options) {
         }
       }
     }),
-    tool3({
+    tool4({
       name: "follow_links",
       description: "Given an entry's path, list the entries it links to (via [[name]]) and the entries that link back to it. Use to traverse related notes \u2014 the associative graph the flat map does not show. Dangling links (no entry yet) are reported separately.",
       parameters: {
-        path: z3.string().describe("Entry path to traverse from.")
+        path: z4.string().describe("Entry path to traverse from.")
       },
       implementation: async ({ path }, { status }) => {
         status(`Links of ${path}`);
@@ -645,7 +728,7 @@ function createMapTools(options) {
   ];
   if (options.enableWrite) {
     tools.push(
-      tool3({
+      tool4({
         name: "write_node",
         description: `Save a note into the knowledge base. For a NEW capture, write it to \`${incomingFolder}/<kebab-name>.md\` (the inbox; organize_incoming sorts it later). ALWAYS begin the file with YAML frontmatter and fill every field:
 ---
@@ -657,10 +740,10 @@ tags: [<2-5 lowercase topic tags>]
 ---
 Then a \`# Title\` and the body. Good name/description/type/tags are what let the note be sorted and found later, so do not leave them blank. The map refreshes automatically on the next turn.`,
         parameters: {
-          path: z3.string().describe(
+          path: z4.string().describe(
             `Destination path relative to the KB root, ending in .md (e.g. '${incomingFolder}/my-note.md').`
           ),
-          content: z3.string().describe(
+          content: z4.string().describe(
             "Full file contents, starting with the YAML frontmatter block."
           )
         },
@@ -679,11 +762,11 @@ Then a \`# Title\` and the body. Good name/description/type/tags are what let th
           }
         }
       }),
-      tool3({
+      tool4({
         name: "organize_incoming",
         description: `Sort the \`${incomingFolder}/\` inbox into the knowledge base's folders using each note's frontmatter type and tags (type: project \u2192 projects/, a 'reference' tag \u2192 references/, etc.). Call with apply=false (default) to PREVIEW the moves, then apply=true to perform them. Notes with no usable type/tag are left in the inbox.`,
         parameters: {
-          apply: z3.boolean().default(false).describe("false = preview the plan; true = perform the moves.")
+          apply: z4.boolean().default(false).describe("false = preview the plan; true = perform the moves.")
         },
         implementation: async ({ apply }, { status, warn }) => {
           status(
@@ -744,6 +827,14 @@ Then a \`# Title\` and the body. Good name/description/type/tags are what let th
   }
   return tools;
 }
+
+// packages/core/src/tools/data-tools.ts
+import { tool as tool5 } from "@lmstudio/sdk";
+import { z as z5 } from "zod";
+
+// packages/core/src/tools/memory-tools.ts
+import { tool as tool6 } from "@lmstudio/sdk";
+import { z as z6 } from "zod";
 
 // packages/plugin-kbmap/src/index.ts
 import { homedir } from "node:os";

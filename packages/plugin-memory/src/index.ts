@@ -10,11 +10,24 @@ import type {
   ChatMessage,
   PluginContext,
   PromptPreprocessorController,
+  Tool,
+  ToolsProviderController,
 } from "@lmstudio/sdk";
-import type { EmbedFn } from "@lmstudio-suite/core";
+import { createMemoryTools, type EmbedFn } from "@lmstudio-suite/core";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { chatConfigSchematics, globalConfigSchematics } from "./config";
 import { buildContextBlock } from "./context";
 import { getOrBuildStore } from "./index-builder";
+
+/** Expand a leading ~ and resolve; "" stays "". */
+function expandHome(p: string): string {
+  const t = p.trim();
+  if (!t) return "";
+  const expanded =
+    t === "~" || t.startsWith("~/") ? join(homedir(), t.slice(1)) : t;
+  return resolve(expanded);
+}
 
 export async function preprocess(
   ctl: PromptPreprocessorController,
@@ -25,7 +38,8 @@ export async function preprocess(
 
   const global = ctl.getGlobalPluginConfig(globalConfigSchematics);
   const chat = ctl.getPluginConfig(chatConfigSchematics);
-  const knowledgeDir = global.get("knowledgeDir").trim();
+  // Expand ~ so retrieval reads the SAME directory the write tools write to.
+  const knowledgeDir = expandHome(global.get("knowledgeDir"));
   const embeddingModel = global.get("embeddingModel").trim();
   if (!knowledgeDir || !embeddingModel) return userMessage; // not configured
 
@@ -53,9 +67,21 @@ export async function preprocess(
   }
 }
 
+export async function toolsProvider(
+  ctl: ToolsProviderController,
+): Promise<Tool[]> {
+  const global = ctl.getGlobalPluginConfig(globalConfigSchematics);
+  const chat = ctl.getPluginConfig(chatConfigSchematics);
+  const dir = expandHome(global.get("knowledgeDir"));
+  // Inert until a knowledge directory is configured and writing is enabled.
+  if (!dir || !chat.get("enableWrite")) return [];
+  return createMemoryTools({ root: dir });
+}
+
 export async function main(context: PluginContext) {
   context
     .withConfigSchematics(chatConfigSchematics)
     .withGlobalConfigSchematics(globalConfigSchematics)
-    .withPromptPreprocessor(preprocess);
+    .withPromptPreprocessor(preprocess)
+    .withToolsProvider(toolsProvider);
 }

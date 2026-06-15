@@ -9,17 +9,28 @@ function fakeController(): ToolsProviderController {
   });
   return {
     getGlobalPluginConfig: () =>
-      cfg({ searchProvider: "duckduckgo", searchApiKey: "", searxngUrl: "" }),
-    getPluginConfig: () => cfg({ maxResults: 5, fetchMaxChars: 8000 }),
+      cfg({
+        searchProvider: "duckduckgo",
+        searchApiKey: "",
+        searxngUrl: "",
+        allowPrivateHosts: false,
+      }),
+    getPluginConfig: () =>
+      cfg({ maxResults: 5, fetchMaxChars: 8000, downloadDir: "" }),
     abortSignal: new AbortController().signal,
   } as unknown as ToolsProviderController;
 }
 
 describe("web-tools toolsProvider", () => {
-  it("exposes exactly the web_search and fetch_url tools", async () => {
+  it("exposes the search/fetch tools plus the http tools", async () => {
     const tools = await toolsProvider(fakeController());
-    expect(tools).toHaveLength(2);
     const names = tools.map((t) => (t as { name: string }).name).sort();
-    expect(names).toEqual(["fetch_url", "web_search"]);
+    expect(names).toEqual([
+      "crawl",
+      "download_file",
+      "fetch_url",
+      "http_request",
+      "web_search",
+    ]);
   });
 });

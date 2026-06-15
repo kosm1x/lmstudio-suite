@@ -42,6 +42,64 @@ The plugins import the unpublished workspace package `@lmstudio-suite/core`, so 
 - **A budget that isn't a hard bound silently bloats every-turn context.** First cut only triggered the "+N more" rollup _inside_ a folder's node loop, so the per-folder heading + first entry always emitted — a one-folder-per-note vault blew `maxChars` by up to ~38× (warm tier had no budget check at all). Fix: account headings + the warm section in the running total, gate rollup on the running total (not "have I shown ≥1 here"), and **reserve headroom so the trailing summary always fits** — otherwise you stay under budget but drop the "+N more" marker, i.e. silently truncate.
 - **Scope a read tool to the index, not just the root.** `read_node` originally read any file under the KB root via ScopedFs. ScopedFs blocks `..` traversal but not a `.env`/key that simply _sits_ in the root — `collectKbFiles` hides it from the map, but the model could still read it by path. Gate the read to entries present in the graph (membership check), and allowlist write extensions. The traversal guard and the visibility policy are two different controls.
 
+## Tool design — editing files & shared builders
+
+- **Put a capability in `core/tools` once; plugins and the CLI inherit it.** `edit_file` is a
+  single `tool()` builder inside `createFsTools`, so both the `local-tools` plugin and `agent-cli`
+  gained it with zero wiring. The roadmap invariant ("never implement a capability twice") is not
+  bureaucracy — it's what makes one commit ship a tool everywhere.
+- **A model-facing read and an edit read are different reads.** `ScopedFs.readFile` caps at 1MB to
+  protect context; a file-editing tool that reads through it and writes the result back **silently
+  truncates everything past the cap**. Edits must use a separate non-truncating read (`readFileFull`).
+  The >1MB regression test exists to keep that wired — if someone "simplifies" edit_file back onto the
+  capped read, an over-cap `old_string` reads as not-found and the test fails loudly.
+- **Mutating an existing file means writing atomically.** Truncate-in-place (`writeFile(path, …)`) is
+  fine for create/overwrite but for `edit_file` a crash mid-write loses _existing_ content. Stage to a
+  sibling temp file and `rename()` into place — atomic within a filesystem, and a same-dir temp is on
+  the same filesystem. (qa-auditor flagged this; we folded the fix in rather than queuing it, since
+  not-corrupting-files is the whole point of an edit tool.)
+- **Literal find/replace, not `String.prototype.replace`.** `String.replace(str, repl)` treats `$&`,
+  `$1`, `$\`` in the replacement as special — a model replacing code containing `$` gets corruption.
+  Use `indexOf` + slice/concat for the single case and `split(old).join(new)` for `replace_all`; both
+  are fully literal. Test it explicitly (`new_string: "$1$&"`).
+- **Make the unique-match contract the default and fail closed.** `edit_file` requires `old_string` to
+  match exactly once unless `replace_all`; not-found / ambiguous / empty / identical-old==new all
+  return an error **before any write**. A model that gets "matches 3 times, add context or set
+  replace_all" self-corrects; one that silently edited the first match would corrupt quietly.
+
+## Growing the suite (patterns from the Phase 1–5 roadmap build)
+
+- **One core builder, every consumer.** Every tool is a `tool()` builder in `core/tools`, wired into a
+  plugin AND `agent-cli`. Adding `edit_file`/`search_files`/etc. to `createFsTools` lit them up in the
+  plugin and the CLI at once. The `toolkit` meta-plugin and the `eval` harness just compose the same
+  builders — no capability is implemented twice, so the path guard / SSRF guard / caps are identical
+  everywhere.
+- **CI earns its keep immediately.** The first full `vitest run` in CI caught a plugin test that had
+  silently broken three commits earlier — per-phase _scoped_ runs never executed it. Scope runs for
+  speed while iterating; gate on the whole suite.
+- **`node:sqlite` is the dependency-free SQL story** (Node ≥22): open `{ readOnly: true }` (the engine
+  rejects writes) AND pre-check SELECT/WITH-only — neither alone. Stream results with `.iterate()` and
+  stop at the row cap; `.all()` materialises the whole set and the "cap" becomes display-only. Same
+  trap for file readers: cap the _read_ (stat-then-refuse), not just the rows shown.
+- **One audited network path.** `guardedFetch` follows redirects manually and re-validates **every**
+  hop's host against the SSRF guard before contacting it (a public URL can 30x into `169.254.169.254`).
+  `fetch_url`, `http_request`, `download_file`, and `crawl` all route through it; default-deny private
+  hosts at every layer. The guard keys on `URL.hostname` (normalises IPv4-mapped IPv6, trailing-dot
+  FQDNs), not a smuggle-able Host header.
+- **Writable memory closes the loop for free.** `remember` writes a markdown note _into the knowledge
+  dir the RAG plugin indexes_, so the index rebuilds on the next message and the fact is retrievable —
+  no separate store. Lesson the auditor caught: a model-controlled `id` (in `forget`) must be sanitized
+  the _same way_ as the write path (`remember` slugified; `forget` didn't → `forget("../note")` deleted
+  real notes). `ScopedFs` guards the root, not a subdir.
+- **Decorate tools, don't fork them.** `withApproval` / `withTrace` wrap any `Tool[]`, overriding only
+  `implementation` so the SDK schema + `checkParameters` survive. Keep the mutating-tool list complete
+  or a new writer is silently un-gated. In-app approval is LM Studio's per-tool Ask/Allow — the wrapper
+  is for the CLI, opt-in (`--approve`) so non-interactive runs don't hang.
+- **A tool-selection eval must resist spray-all.** Giving every task the full toolset and passing on
+  "expected tool appeared once" lets a model that calls _everything_ score 100%. Since the tasks are
+  read-only, failing any task where a _mutating_ tool was called (plus stronger arg validators) makes
+  the metric measure selection, not coverage.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).

@@ -3,6 +3,6 @@
   "owner": "kosmix",
   "type": "plugin",
   "runner": "node",
-  "revision": 1,
-  "tags": ["tools", "web", "search"]
+  "revision": 2,
+  "tags": ["tools", "web", "search", "http"]
 }

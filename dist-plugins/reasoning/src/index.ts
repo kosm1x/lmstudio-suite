@@ -16,13 +16,25 @@ ${instruction}`;
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
 
-// packages/core/src/tools/local-tools.ts
+// packages/core/src/tools/http-tools.ts
 import { tool as tool2 } from "@lmstudio/sdk";
 import { z as z2 } from "zod";
 
-// packages/core/src/tools/map-tools.ts
+// packages/core/src/tools/local-tools.ts
 import { tool as tool3 } from "@lmstudio/sdk";
 import { z as z3 } from "zod";
+
+// packages/core/src/tools/map-tools.ts
+import { tool as tool4 } from "@lmstudio/sdk";
+import { z as z4 } from "zod";
+
+// packages/core/src/tools/data-tools.ts
+import { tool as tool5 } from "@lmstudio/sdk";
+import { z as z5 } from "zod";
+
+// packages/core/src/tools/memory-tools.ts
+import { tool as tool6 } from "@lmstudio/sdk";
+import { z as z6 } from "zod";
 
 // packages/plugin-reasoning/src/config.ts
 import { createConfigSchematics } from "@lmstudio/sdk";

@@ -9,6 +9,14 @@ export interface CliArgs {
   shell: boolean;
   /** Knowledge-base directory for the map-memory tools (absolute). */
   kb?: string;
+  /** Directory for the writable memory tools remember/recall/forget (absolute). */
+  memory?: string;
+  /** Expose the data tools (calculator / json / csv / sqlite). */
+  data: boolean;
+  /** Gate mutating tools behind an interactive y/N prompt. */
+  approve: boolean;
+  /** Append a JSONL trace of every tool call to this file. */
+  trace?: string;
   help: boolean;
 }
 
@@ -18,6 +26,8 @@ export function parseArgs(argv: string[]): CliArgs {
     cwd: process.cwd(),
     maxRounds: 8,
     shell: false,
+    data: false,
+    approve: false,
     help: false,
   };
   const positional: string[] = [];
@@ -36,11 +46,23 @@ export function parseArgs(argv: string[]): CliArgs {
       case "--kb":
         args.kb = resolve(argv[++i] ?? ".");
         break;
+      case "--memory":
+        args.memory = resolve(argv[++i] ?? ".");
+        break;
       case "--max-rounds":
         args.maxRounds = Math.max(1, Number(argv[++i] ?? "8") || 8);
         break;
       case "--shell":
         args.shell = true;
+        break;
+      case "--data":
+        args.data = true;
+        break;
+      case "--approve":
+        args.approve = true;
+        break;
+      case "--trace":
+        args.trace = resolve(argv[++i] ?? "trace.jsonl");
         break;
       case "--help":
       case "-h":
@@ -67,6 +89,10 @@ Options:
       --max-rounds <n> Max agent prediction rounds (default: 8)
       --shell          Enable the run_shell tool (off by default)
       --kb <dir>       Knowledge-base dir to expose as map-memory tools
+      --memory <dir>   Dir for writable memory tools (remember / recall / forget)
+      --data           Enable the data tools (calculator / json / csv / sqlite)
+      --approve        Ask y/N before each mutating tool (write/delete/shell/http…)
+      --trace <file>   Append a JSONL trace of every tool call to <file>
   -h, --help           Show this help
 
 Environment (web search):
@@ -74,7 +100,8 @@ Environment (web search):
   SEARCH_API_KEY   API key for tavily/brave
   SEARXNG_URL      Base URL for a self-hosted SearXNG instance
 
-The agent always has: web_search, fetch_url, read_file, write_file, list_dir.
+The agent always has: web_search, fetch_url, http_request, download_file, crawl,
+and the filesystem tools (read/write/edit/search/glob/list/stat/move/mkdir/delete).
 With --shell it also gets run_shell (commands run with your privileges).
 With --kb it also gets map_overview, search_map, read_node, follow_links over
 that knowledge base.`;

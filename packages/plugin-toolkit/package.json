@@ -1,0 +1,13 @@
+{
+  "name": "@lmstudio-suite/plugin-toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio Tools Provider meta-plugin: one install exposing the whole suite (web/http/fs/shell/data/memory/kb-map) via per-group toggles.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0",
+    "zod": "^3.25.76"
+  }
+}

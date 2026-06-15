@@ -1,7 +1,7 @@
 /** Fetch a web page and return it as compact Markdown for LLM consumption. */
-import { fetchWithTimeout, DEFAULT_UA, type HttpControl } from "./http";
+import { DEFAULT_UA, type HttpControl } from "./http";
+import { guardedFetch } from "./guarded-fetch";
 import { htmlToMarkdown, extractTitle } from "./html-to-markdown";
-import { isPrivateHost, parseHttpUrl } from "./url";
 
 export interface FetchPageOptions extends HttpControl {
   /** Truncate the Markdown to this many characters (default 8000). */
@@ -45,43 +45,17 @@ export async function fetchPage(
     maxRedirects = 5,
   } = options;
 
-  const guardHost = (u: URL) => {
-    if (!allowPrivateHosts && isPrivateHost(u.hostname)) {
-      throw new Error(
-        `Refusing to fetch a private/loopback host (${u.hostname}). ` +
-          `Set allowPrivateHosts to override.`,
-      );
-    }
-  };
-
-  // Follow redirects manually so every hop's host is re-validated (a public URL
-  // can otherwise 30x into a private/metadata address).
-  let current = url;
-  let hops = 0;
-  let res: Response;
-  for (;;) {
-    guardHost(parseHttpUrl(current));
-    res = await fetchWithTimeout(
-      current,
-      {
-        redirect: "manual",
-        headers: {
-          "user-agent": userAgent,
-          accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
-        },
+  // The shared guarded path re-validates every redirect hop's host (SSRF).
+  const { response: res, finalUrl: current } = await guardedFetch(
+    url,
+    {
+      headers: {
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
       },
-      { timeoutMs, signal },
-    );
-    const location = res.headers.get("location");
-    if (res.status >= 300 && res.status < 400 && location) {
-      if (++hops > maxRedirects)
-        throw new Error(`Too many redirects fetching ${url}`);
-      current = new URL(location, current).toString();
-      continue;
-    }
-    break;
-  }
+    },
+    { allowPrivateHosts, maxRedirects, timeoutMs, signal, userAgent },
+  );
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText} fetching ${current}`);
   }

@@ -6,12 +6,15 @@ Part of [lmstudio-suite](https://github.com/kosm1x/lmstudio-suite).
 
 ## Tools
 
-| Tool         | What it does                                                            |
-| ------------ | ----------------------------------------------------------------------- |
-| `web_search` | Search the web; returns a ranked list of results (title, URL, snippet). |
-| `fetch_url`  | Fetch an http/https page and return its main content as clean Markdown. |
+| Tool            | What it does                                                                  |
+| --------------- | ----------------------------------------------------------------------------- |
+| `web_search`    | Search the web; returns a ranked list of results (title, URL, snippet).       |
+| `fetch_url`     | Fetch an http/https page and return its main content as clean Markdown.       |
+| `http_request`  | Call a REST API (GET/POST/PUT/PATCH/DELETE) with headers + body; byte-capped. |
+| `download_file` | Download a file into the configured download directory (size-capped).         |
+| `crawl`         | Follow same-origin links from a start URL (bounded depth + pages) → Markdown. |
 
-Typical flow: the model calls `web_search` to find sources, then `fetch_url` to read the most relevant one.
+Typical flow: `web_search` to find sources, `fetch_url` to read one; `http_request` hits JSON APIs, `crawl` reads a small doc section, `download_file` saves an asset. Every request blocks private/loopback hosts by default (SSRF), re-validated across redirects.
 
 ## Configuration
 

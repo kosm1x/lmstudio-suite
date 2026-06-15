@@ -1,0 +1,13 @@
+{
+  "name": "@lmstudio-suite/plugin-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio Tools Provider plugin: deterministic data + math — calculator, JSON/CSV readers, read-only SQLite.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0",
+    "zod": "^3.25.76"
+  }
+}

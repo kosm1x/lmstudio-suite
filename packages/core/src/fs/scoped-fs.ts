@@ -10,6 +10,7 @@
  * directories you trust.
  */
 import { promises as fsp } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 export interface ScopedFsOptions {
@@ -22,6 +23,20 @@ export interface DirEntry {
   name: string;
   type: DirEntryType;
 }
+
+export interface StatInfo {
+  type: DirEntryType;
+  /** Size in bytes. */
+  size: number;
+  /** Last-modified time, ms since epoch. */
+  mtimeMs: number;
+}
+
+/** Directory names skipped by `walk` unless overridden. */
+export const DEFAULT_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  ".git",
+  "node_modules",
+]);
 
 export class PathEscapeError extends Error {
   constructor(p: string) {
@@ -65,11 +80,49 @@ export class ScopedFs {
     }
   }
 
-  /** Write a file, creating parent directories as needed. */
+  /**
+   * Read the entire file with no truncation cap. Use for edit/transform
+   * operations, where writing back a model-facing (size-capped) read would
+   * silently drop everything past the cap. `readFile` is the capped read.
+   */
+  async readFileFull(relPath: string): Promise<string> {
+    return fsp.readFile(this.resolvePath(relPath), "utf-8");
+  }
+
+  /**
+   * Write a file, creating parent directories as needed.
+   *
+   * Atomic: the content is staged to a sibling temp file and renamed into
+   * place, so a crash mid-write leaves the temp file rather than a truncated
+   * original. (rename is atomic within a filesystem; the temp sits in the same
+   * directory as the target, hence the same filesystem.) This matters for
+   * `edit_file`, where a partial write would corrupt existing content.
+   */
   async writeFile(relPath: string, content: string): Promise<void> {
     const p = this.resolvePath(relPath);
     await fsp.mkdir(dirname(p), { recursive: true });
-    await fsp.writeFile(p, content, "utf-8");
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, content, "utf-8");
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
+  }
+
+  /** Atomically write raw bytes (e.g. a downloaded file). Same temp+rename. */
+  async writeBytes(relPath: string, data: Uint8Array): Promise<void> {
+    const p = this.resolvePath(relPath);
+    await fsp.mkdir(dirname(p), { recursive: true });
+    const tmp = `${p}.tmp-${randomUUID()}`;
+    try {
+      await fsp.writeFile(tmp, data);
+      await fsp.rename(tmp, p);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
   }
 
   /** Move/rename a file within the root; both ends are traversal-guarded. */
@@ -99,6 +152,47 @@ export class ScopedFs {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** Type + size + mtime for a path. Throws (ENOENT) if it does not exist. */
+  async stat(relPath: string): Promise<StatInfo> {
+    const s = await fsp.stat(this.resolvePath(relPath));
+    return {
+      type: s.isDirectory() ? "dir" : s.isFile() ? "file" : "other",
+      size: s.size,
+      mtimeMs: s.mtimeMs,
+    };
+  }
+
+  /**
+   * Recursively yield file paths (relative to root, POSIX-separated `/`) under
+   * `relPath`. Yields files only; directories whose name is in `ignore` are
+   * pruned. Symlinks are not followed, and unreadable directories are skipped
+   * rather than throwing. Iteration order is unspecified — sort if you need it.
+   */
+  async *walk(
+    relPath = ".",
+    options: { ignore?: ReadonlySet<string> } = {},
+  ): AsyncGenerator<string> {
+    const ignore = options.ignore ?? DEFAULT_IGNORE_DIRS;
+    const stack: string[] = [this.resolvePath(relPath)];
+    while (stack.length > 0) {
+      const dir = stack.pop() as string;
+      let entries;
+      try {
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch {
+        continue; // unreadable directory → skip
+      }
+      for (const e of entries) {
+        const abs = resolve(dir, e.name);
+        if (e.isDirectory()) {
+          if (!ignore.has(e.name)) stack.push(abs);
+        } else if (e.isFile()) {
+          yield relative(this.root, abs).split(sep).join("/");
+        }
+      }
     }
   }
 
