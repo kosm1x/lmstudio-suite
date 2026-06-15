@@ -33,6 +33,15 @@ describe("parseArgs", () => {
     expect(a.kb).toBeUndefined();
     expect(a.memory).toBeUndefined();
     expect(a.data).toBe(false);
+    expect(a.approve).toBe(false);
+    expect(a.trace).toBeUndefined();
+  });
+
+  it("parses --approve and --trace", () => {
+    const a = parseArgs(["--approve", "--trace", "t.jsonl", "go"]);
+    expect(a.approve).toBe(true);
+    expect(a.trace).toBe(resolve("t.jsonl"));
+    expect(a.prompt).toBe("go");
   });
 
   it("resolves --kb and --memory to absolute paths", () => {

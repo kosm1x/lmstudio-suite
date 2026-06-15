@@ -6,6 +6,8 @@
  * fetch, scoped filesystem, optional shell), and runs an agentic .act() loop.
  */
 import type { ChatMessage, Tool } from "@lmstudio/sdk";
+import { appendFileSync } from "node:fs";
+import { createInterface } from "node:readline";
 import {
   createClient,
   createDataTools,
@@ -15,12 +17,31 @@ import {
   createMemoryTools,
   createShellTool,
   createWebTools,
+  withApproval,
+  withTrace,
   scanKbDir,
   type KbGraph,
   type SearchConfig,
   type SearchProviderName,
 } from "@lmstudio-suite/core";
 import { HELP_TEXT, parseArgs } from "./args";
+
+/** Interactive y/N gate for --approve. Prompts on stderr, reads stdin. */
+async function confirmToolCall(name: string, args: unknown): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const preview = JSON.stringify(args);
+    const answer = await new Promise<string>((res) =>
+      rl.question(
+        `\nRun ${name}(${preview.length > 120 ? preview.slice(0, 120) + "…" : preview})? [y/N] `,
+        res,
+      ),
+    );
+    return /^y(es)?$/i.test(answer.trim());
+  } finally {
+    rl.close();
+  }
+}
 
 async function run(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -58,6 +79,19 @@ async function run(): Promise<void> {
     tools.push(...createMapTools({ root: kbRoot, loadGraph }));
   }
 
+  // Decorators (innermost first): approval gates execution; trace logs the
+  // outcome, including a declined call.
+  let finalTools = tools;
+  if (args.approve) {
+    finalTools = withApproval(finalTools, { approve: confirmToolCall });
+  }
+  if (args.trace) {
+    const tracePath = args.trace;
+    finalTools = withTrace(finalTools, (t) =>
+      appendFileSync(tracePath, JSON.stringify(t) + "\n"),
+    );
+  }
+
   const client = createClient();
   const model = args.model
     ? await client.llm.model(args.model)
@@ -67,7 +101,7 @@ async function run(): Promise<void> {
     `Working dir: ${args.cwd}\nTools: ${tools.map((t) => t.name).join(", ")}\n\n`,
   );
 
-  const result = await model.act(args.prompt, tools, {
+  const result = await model.act(args.prompt, finalTools, {
     maxPredictionRounds: args.maxRounds,
     onRoundStart: (roundIndex: number) => {
       process.stderr.write(`\n— round ${roundIndex + 1} —\n`);

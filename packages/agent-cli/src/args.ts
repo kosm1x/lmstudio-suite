@@ -13,6 +13,10 @@ export interface CliArgs {
   memory?: string;
   /** Expose the data tools (calculator / json / csv / sqlite). */
   data: boolean;
+  /** Gate mutating tools behind an interactive y/N prompt. */
+  approve: boolean;
+  /** Append a JSONL trace of every tool call to this file. */
+  trace?: string;
   help: boolean;
 }
 
@@ -23,6 +27,7 @@ export function parseArgs(argv: string[]): CliArgs {
     maxRounds: 8,
     shell: false,
     data: false,
+    approve: false,
     help: false,
   };
   const positional: string[] = [];
@@ -53,6 +58,12 @@ export function parseArgs(argv: string[]): CliArgs {
       case "--data":
         args.data = true;
         break;
+      case "--approve":
+        args.approve = true;
+        break;
+      case "--trace":
+        args.trace = resolve(argv[++i] ?? "trace.jsonl");
+        break;
       case "--help":
       case "-h":
         args.help = true;
@@ -80,6 +91,8 @@ Options:
       --kb <dir>       Knowledge-base dir to expose as map-memory tools
       --memory <dir>   Dir for writable memory tools (remember / recall / forget)
       --data           Enable the data tools (calculator / json / csv / sqlite)
+      --approve        Ask y/N before each mutating tool (write/delete/shell/http…)
+      --trace <file>   Append a JSONL trace of every tool call to <file>
   -h, --help           Show this help
 
 Environment (web search):
