@@ -1,7 +1,7 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
 > **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
-> merged to `main` (PR #2, merge `7410bfc`; typecheck clean, 250 tests green, 8 plugins
+> merged to `main` (PR #2, merge `7410bfc`; typecheck clean, 256 tests green, 8 plugins
 > bundle). All **eight** plugins are live on the LM Studio Hub under
 > [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
 > `kb-map` · `reasoning` · `data-tools` · `toolkit` · `calc-generator`.
