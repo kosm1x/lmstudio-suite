@@ -1,0 +1,12 @@
+{
+  "name": "@lmstudio-suite/plugin-time",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio plugin: injects the current date/time each turn and exposes deterministic date/time + timezone tools.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}

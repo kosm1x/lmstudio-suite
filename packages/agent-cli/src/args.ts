@@ -13,6 +13,8 @@ export interface CliArgs {
   memory?: string;
   /** Expose the data tools (calculator / json / csv / sqlite). */
   data: boolean;
+  /** Default IANA timezone for the time tools + injected date/time line. */
+  tz?: string;
   /** Gate mutating tools behind an interactive y/N prompt. */
   approve: boolean;
   /** Append a JSONL trace of every tool call to this file. */
@@ -58,6 +60,9 @@ export function parseArgs(argv: string[]): CliArgs {
       case "--data":
         args.data = true;
         break;
+      case "--tz":
+        args.tz = argv[++i];
+        break;
       case "--approve":
         args.approve = true;
         break;
@@ -91,6 +96,7 @@ Options:
       --kb <dir>       Knowledge-base dir to expose as map-memory tools
       --memory <dir>   Dir for writable memory tools (remember / recall / forget)
       --data           Enable the data tools (calculator / json / csv / sqlite)
+      --tz <zone>      Default IANA timezone for the time tools (default: this machine's)
       --approve        Ask y/N before each mutating tool (write/delete/shell/http…)
       --trace <file>   Append a JSONL trace of every tool call to <file>
   -h, --help           Show this help
@@ -101,7 +107,9 @@ Environment (web search):
   SEARXNG_URL      Base URL for a self-hosted SearXNG instance
 
 The agent always has: web_search, fetch_url, http_request, download_file, crawl,
-and the filesystem tools (read/write/edit/search/glob/list/stat/move/mkdir/delete).
+the filesystem tools (read/write/edit/search/glob/list/stat/move/mkdir/delete), and
+the time tools (now, time_until, add_duration, diff_dates, convert_timezone). The
+current date/time is also prepended to your task so the model never guesses it.
 With --shell it also gets run_shell (commands run with your privileges).
 With --kb it also gets map_overview, search_map, read_node, follow_links over
 that knowledge base.`;

@@ -7025,6 +7025,10 @@ import { z as z5 } from "zod";
 import { tool as tool6 } from "@lmstudio/sdk";
 import { z as z6 } from "zod";
 
+// packages/core/src/tools/time-tools.ts
+import { tool as tool7 } from "@lmstudio/sdk";
+import { z as z7 } from "zod";
+
 // packages/plugin-web/src/tools.ts
 async function resolveDownloadDir(configured) {
   const dir = (configured ?? "").trim();

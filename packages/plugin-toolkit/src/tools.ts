@@ -11,6 +11,7 @@ import {
   createDataTools,
   createMemoryTools,
   createMapTools,
+  createTimeTools,
   scanKbDir,
   type KbGraph,
   type SearchProviderName,
@@ -69,6 +70,13 @@ export async function toolsProvider(
   }
   if (chat.get("enableData")) {
     tools.push(...createDataTools({ root }));
+  }
+  if (chat.get("enableTime")) {
+    tools.push(
+      ...createTimeTools({
+        defaultTimezone: global.get("timezone") || undefined,
+      }),
+    );
   }
   if (chat.get("enableMemory")) {
     tools.push(...createMemoryTools({ root }));

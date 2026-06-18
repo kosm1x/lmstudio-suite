@@ -670,6 +670,10 @@ function createDataTools(options) {
 import { tool as tool6 } from "@lmstudio/sdk";
 import { z as z6 } from "zod";
 
+// packages/core/src/tools/time-tools.ts
+import { tool as tool7 } from "@lmstudio/sdk";
+import { z as z7 } from "zod";
+
 // packages/plugin-data/src/tools.ts
 async function resolveRoot(ctl, configuredDir) {
   const dir = (configuredDir ?? "").trim();

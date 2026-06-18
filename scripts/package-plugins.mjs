@@ -37,6 +37,7 @@ const PLUGINS = [
   "plugin-reasoning",
   "plugin-kbmap",
   "plugin-data",
+  "plugin-time",
   "plugin-toolkit",
   "plugin-generator",
 ];

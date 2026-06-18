@@ -56,6 +56,16 @@ export const globalConfigSchematics = createConfigSchematics()
     },
     false,
   )
+  .field(
+    "timezone",
+    "string",
+    {
+      displayName: "Default timezone",
+      hint: "IANA timezone the date/time tools use by default (e.g. 'America/Mexico_City'). Leave blank to use this machine's timezone.",
+      placeholder: "America/Mexico_City",
+    },
+    "",
+  )
   .build();
 
 /** One boolean per tool group. Read-leaning groups default on; mutating ones off. */
@@ -97,6 +107,15 @@ export const chatConfigSchematics = createConfigSchematics()
     {
       displayName: "Data + math",
       hint: "calculator, parse_json, read_csv, query_sqlite.",
+    },
+    true,
+  )
+  .field(
+    "enableTime",
+    "boolean",
+    {
+      displayName: "Date + time",
+      hint: "now, time_until, add_duration, diff_dates, convert_timezone.",
     },
     true,
   )

@@ -129,6 +129,29 @@ not write it again.` The 2nd–Nth identical write becomes a free no-op the mode
   `npm install` (not just the test trio) whenever you add a workspace, or CI is the first thing to tell
   you.
 
+## Date/time (the `time` plugin / `core/time`)
+
+- **Inject the clock; never read it inside the logic.** Every function in `core/time` takes the
+  instant it operates on, so it's pure and unit-testable; `createTimeTools({ now })` and the plugin
+  are the only places a real `new Date()` appears. Tests pass a fixed `now` and assert exact strings —
+  no flakiness, no fake timers. (`now`/`time_until` would be untestable otherwise.)
+- **`Intl` is the dependency-free timezone story** (same shape as the `node:sqlite` lesson). DST-aware
+  offsets come from an `Intl.DateTimeFormat(..., { timeZone, hourCycle: "h23" }).formatToParts()`
+  round-trip (format the instant in the zone, diff against `Date.UTC` of those parts). No `luxon` /
+  `date-fns-tz` dependency — which also keeps the plugin bundle assertion green (only `sdk`/`zod`/`node:*`).
+  `Date.UTC` months are 0-based — the off-by-one bites here.
+- **A wall-clock string is not an instant.** An offset-less datetime is interpreted as _host-local_ per
+  the ECMAScript spec, so `convert_timezone` needs an explicit `from` to anchor it; pass a `Z`/offset to
+  be unambiguous. Two foot-guns we closed by surfacing rather than guessing: (a) a DST spring-forward
+  _gap_ time (e.g. 02:30 on the jump day) doesn't exist — it's documented + test-pinned, not silently
+  shifted; (b) `parseDate("2026")` used to become Jan 1 silently — now a bare integer that isn't 10-digit
+  unix seconds is rejected. A wrong-but-plausible date is worse than a clear error.
+- **`time` is another "preprocessor + tools" plugin, so it gets its own plugin, not a toolkit group
+  alone.** `toolkit` carries the five date/time tools (`enableTime`) but a Tools Provider can't inject
+  the always-on "Current date and time: …" line — that rides `withPromptPreprocessor`, so it lives in
+  `plugin-time` (alongside `memory`/`kb-map`). Same dividing line as the meta-plugin lesson above: the
+  SDK hook, not the feature.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).
