@@ -1,0 +1,14 @@
+{
+  "name": "schedule",
+  "owner": "kosmix",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": [
+    "schedule",
+    "cron",
+    "tasks",
+    "automation",
+    "tools"
+  ]
+}

@@ -152,6 +152,32 @@ not write it again.` The 2nd–Nth identical write becomes a free no-op the mode
   `plugin-time` (alongside `memory`/`kb-map`). Same dividing line as the meta-plugin lesson above: the
   SDK hook, not the feature.
 
+## Scheduling (the `schedule` plugin / `core/schedule`)
+
+- **A plugin cannot run on a timer, so scheduling splits in two.** An LM Studio plugin's hooks
+  (`toolsProvider`/`promptPreprocessor`/`generator`) fire only while the model is responding — there
+  is no background tick. A true cron therefore can't live in a plugin. The design: an **authoring
+  half** (this plugin writes JSON job specs to a directory) + an **execution half** (a separate
+  scheduler daemon, run on the same machine, reads that directory and fires jobs). Phase 1 is the
+  authoring half; it is **inert until the daemon runs**, and every tool message + the README say so
+  rather than implying a job will execute.
+- **Idempotent authoring needs a spec/timestamp split.** `writeFileIfChanged` makes a re-write a
+  no-op only if the bytes match — but a job carries an `updatedAt` that would change on every save and
+  defeat it. Fix: separate the user-authored _spec_ fields from the runtime/bookkeeping fields, compare
+  the spec (`specEquals`), and **only stamp `updatedAt` when the spec actually changed** (`upsertSpec`
+  short-circuits to "unchanged" otherwise, preserving `createdAt` and runtime state). That makes
+  re-issuing the same `schedule_task` a true no-op — the same loop-breaking contract as the write tools.
+- **Sanitize a model-controlled id before it becomes a path.** The store writes
+  `<dir>/schedules/<id>.json`; `ScopedFs` guards the _root_ but not a crafted `../` inside the subdir
+  (exactly the hole the memory `forget` tool once had). Run every id-taking tool through `toScheduleId`
+  (the same slugify the create path uses) so `cancel`/`update`/`run_now` can't escape. Pin it with a
+  traversal test (`"../../etc/passwd"` → `etc-passwd`).
+- **Validate, don't parse, when the dependency is the cost.** Cron _validation_ (field count, ranges,
+  lists, steps) is a dependency-free regex/range check that lives in the plugin. Computing the next
+  fire time needs a real parser (`cron-parser`) — so that belongs in the **non-plugin** daemon, which
+  can take the dep freely; putting it in the plugin would break the bundle's "only sdk/zod/node:\*
+  external" assertion. Draw the line at where the dependency would land.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).

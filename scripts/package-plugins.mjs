@@ -38,6 +38,7 @@ const PLUGINS = [
   "plugin-kbmap",
   "plugin-data",
   "plugin-time",
+  "plugin-schedule",
   "plugin-toolkit",
   "plugin-generator",
 ];

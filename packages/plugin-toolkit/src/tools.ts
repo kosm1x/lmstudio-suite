@@ -12,6 +12,7 @@ import {
   createMemoryTools,
   createMapTools,
   createTimeTools,
+  createScheduleTools,
   scanKbDir,
   type KbGraph,
   type SearchProviderName,
@@ -86,6 +87,14 @@ export async function toolsProvider(
     const loadGraph = async (): Promise<KbGraph> =>
       (graph ??= (await scanKbDir(root)).graph);
     tools.push(...createMapTools({ root, loadGraph }));
+  }
+  if (chat.get("enableSchedule")) {
+    tools.push(
+      ...createScheduleTools({
+        root,
+        defaultTimezone: global.get("timezone") || undefined,
+      }),
+    );
   }
 
   return tools;

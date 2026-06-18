@@ -1,0 +1,12 @@
+{
+  "name": "@lmstudio-suite/plugin-schedule",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio Tools Provider: author scheduled/cron tasks for an external scheduler daemon to run.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}
