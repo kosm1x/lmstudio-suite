@@ -518,6 +518,10 @@ function createMemoryTools(options) {
   ];
 }
 
+// packages/core/src/tools/time-tools.ts
+import { tool as tool7 } from "@lmstudio/sdk";
+import { z as z7 } from "zod";
+
 // packages/plugin-memory/src/index.ts
 import { homedir } from "node:os";
 import { join as join2, resolve as resolve2 } from "node:path";

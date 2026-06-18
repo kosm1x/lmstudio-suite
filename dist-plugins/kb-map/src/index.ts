@@ -850,6 +850,10 @@ import { z as z5 } from "zod";
 import { tool as tool6 } from "@lmstudio/sdk";
 import { z as z6 } from "zod";
 
+// packages/core/src/tools/time-tools.ts
+import { tool as tool7 } from "@lmstudio/sdk";
+import { z as z7 } from "zod";
+
 // packages/plugin-kbmap/src/index.ts
 import { homedir } from "node:os";
 import { resolve as resolve2 } from "node:path";

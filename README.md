@@ -15,8 +15,8 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities
 
-All eight plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
-[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning) · [`data-tools`](https://lmstudio.ai/kosmix/data-tools) · [`toolkit`](https://lmstudio.ai/kosmix/toolkit) (the whole suite in one install) · [`calc-generator`](https://lmstudio.ai/kosmix/calc-generator) (a Generator example).
+All nine plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
+[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning) · [`data-tools`](https://lmstudio.ai/kosmix/data-tools) · [`time`](https://lmstudio.ai/kosmix/time) (date/time injection + tools) · [`toolkit`](https://lmstudio.ai/kosmix/toolkit) (the whole suite in one install) · [`calc-generator`](https://lmstudio.ai/kosmix/calc-generator) (a Generator example).
 The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all phases complete.
 
 | Capability                        | Surface                       | Status                                                                         |
@@ -26,6 +26,7 @@ The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all
 | **RAG / memory (read + write)**   | Preprocessor + Tools Provider | ✅ live — `memory` plugin + core (remember/recall/forget)                      |
 | **Map memory (KB navigation)**    | Preprocessor + Tools Provider | ✅ live — `kb-map` plugin + `core/kb`                                          |
 | **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ live — `data-tools` plugin + `core/data`                                    |
+| **Date/time + timezone**          | Preprocessor + Tools Provider | ✅ live — `time` plugin + `core/time` (now/until/add/diff/convert + injection) |
 | **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                                            |
 | **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                                         |
 
@@ -44,8 +45,9 @@ The phased plan that grew this into a full tool suite (surgical file editing, co
 | `calc-generator` | Generator            | **Keep** — replaces the token source; a different hook entirely                                      |
 | `memory`         | Preprocessor + Tools | **Keep** — toolkit exposes its `remember`/`recall`/`forget` tools but **not** the auto-RAG injection |
 | `kb-map`         | Preprocessor + Tools | **Keep** — toolkit exposes its nav tools but **not** the always-on KB digest injection               |
+| `time`           | Preprocessor + Tools | **Keep** — toolkit exposes its date/time tools but **not** the always-on current-date/time injection |
 
-**Recommended setup:** install `toolkit` for tools, plus `reasoning`, `memory`, and `kb-map` for their preprocessor behavior (and `calc-generator` if you want the Generator example). You can drop the standalone `web-tools` / `local-tools` / `data-tools`.
+**Recommended setup:** install `toolkit` for tools, plus `reasoning`, `memory`, `kb-map`, and `time` for their preprocessor behavior (and `calc-generator` if you want the Generator example). You can drop the standalone `web-tools` / `local-tools` / `data-tools`.
 
 > ⚠️ If you run `toolkit` **and** standalone `memory` / `kb-map`, **disable toolkit's `memory` and `kb-map` groups** — otherwise those tools load twice and the model sees duplicate tool names.
 >
@@ -75,13 +77,15 @@ lmstudio-suite/
 │   │       ├── reasoning/    extractJson + generateStructured + CoT ✅
 │   │       ├── kb/           frontmatter + [[links]] graph + map digest ✅
 │   │       ├── data/         calculator + csv + jsonpath + sql-readonly  ✅
-│   │       └── tools/        shared SDK tool() builders + http + memory + decorators ✅
+│   │       ├── time/         date/time format + tz math + injection line ✅
+│   │       └── tools/        shared SDK tool() builders + http + memory + time + decorators ✅
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url + http_request/download/crawl)
 │   ├── plugin-local/         ✅ Tools Provider (read/write/edit/search/glob/file-ops + opt-in run_shell)
 │   ├── plugin-memory/        ✅ Preprocessor (RAG) + opt-in write tools (remember/recall/forget)
 │   ├── plugin-kbmap/         ✅ Preprocessor + Tools Provider (map memory over a KB)
 │   ├── plugin-reasoning/     ✅ Prompt Preprocessor (chain-of-thought scaffolding)
 │   ├── plugin-data/          ✅ Tools Provider (calculator + json/csv readers + read-only sqlite)
+│   ├── plugin-time/          ✅ Preprocessor (date/time injection) + Tools Provider (now/until/add/diff/convert)
 │   ├── plugin-toolkit/       ✅ Meta-plugin (all groups via per-chat toggles)
 │   ├── plugin-generator/     ✅ Generator example (calculator replaces the LLM)
 │   ├── agent-cli/            ✅ Standalone .act() agent (composes all tools; --approve / --trace)
@@ -109,7 +113,7 @@ The plugins import the shared workspace package `@lmstudio-suite/core`, which is
 ```bash
 npm run package:plugins        # owner comes from each manifest (kosmix)
 # or override: npm run package:plugins -- --owner <your-lms-hub-handle>
-# → dist-plugins/{web-tools,local-tools,memory,kb-map,reasoning,data-tools,toolkit,calc-generator}/
+# → dist-plugins/{web-tools,local-tools,memory,kb-map,reasoning,data-tools,time,toolkit,calc-generator}/
 #   each: manifest.json · package.json (lms-plugin-<name>) · package-lock.json ·
 #         tsconfig.json · src/index.ts  (self-contained bundle)
 
@@ -132,7 +136,7 @@ npm start -w @lmstudio-suite/agent-cli -- "Find the latest LM Studio release and
 # web search backend via env: SEARCH_PROVIDER, SEARCH_API_KEY, SEARXNG_URL
 ```
 
-The agent always has `web_search`, `fetch_url`, `read_file`, `write_file`, `edit_file`, `search_files`, `glob`, `list_dir`, `stat_path`, `move_file`, `make_dir`, `delete_file`; `--shell` adds `run_shell`.
+The agent always has `web_search`, `fetch_url`, `read_file`, `write_file`, `edit_file`, `search_files`, `glob`, `list_dir`, `stat_path`, `move_file`, `make_dir`, `delete_file`, and the time tools (`now`, `time_until`, `add_duration`, `diff_dates`, `convert_timezone`) — plus the current date/time is prepended to your task; `--shell` adds `run_shell`, `--tz <zone>` sets the default timezone.
 
 ## Develop
 

@@ -16,7 +16,10 @@ import {
   createMapTools,
   createMemoryTools,
   createShellTool,
+  createTimeTools,
   createWebTools,
+  hostTimezone,
+  timeContextLine,
   withApproval,
   withTrace,
   scanKbDir,
@@ -62,10 +65,12 @@ async function run(): Promise<void> {
   const allowPrivateHosts = /^(1|true|yes)$/i.test(
     process.env["ALLOW_PRIVATE_HOSTS"] ?? "",
   );
+  const timezone = args.tz?.trim() || hostTimezone();
   const tools: Tool[] = [
     ...createWebTools({ search, allowPrivateHosts }),
     ...createHttpTools({ root: args.cwd, allowPrivateHosts }),
     ...createFsTools({ root: args.cwd }),
+    ...createTimeTools({ defaultTimezone: timezone }),
   ];
   if (args.shell) tools.push(createShellTool({ cwd: args.cwd }));
   if (args.data) tools.push(...createDataTools({ root: args.cwd }));
@@ -101,7 +106,10 @@ async function run(): Promise<void> {
     `Working dir: ${args.cwd}\nTools: ${tools.map((t) => t.name).join(", ")}\n\n`,
   );
 
-  const result = await model.act(args.prompt, finalTools, {
+  // Prepend the current date/time so the model never has to guess it.
+  const prompt = `${timeContextLine(new Date(), timezone)}\n\n${args.prompt}`;
+
+  const result = await model.act(prompt, finalTools, {
     maxPredictionRounds: args.maxRounds,
     onRoundStart: (roundIndex: number) => {
       process.stderr.write(`\n— round ${roundIndex + 1} —\n`);

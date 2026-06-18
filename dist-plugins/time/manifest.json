@@ -1,0 +1,14 @@
+{
+  "name": "time",
+  "owner": "kosmix",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": [
+    "time",
+    "date",
+    "timezone",
+    "prompt-preprocessor",
+    "tools"
+  ]
+}

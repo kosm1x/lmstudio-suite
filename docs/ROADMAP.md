@@ -1,10 +1,14 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
 > **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
-> merged to `main` (PR #2, merge `7410bfc`; typecheck clean, 256 tests green, 8 plugins
-> bundle). All **eight** plugins are live on the LM Studio Hub under
+> merged to `main` (PR #2, merge `7410bfc`). The suite is now **287 tests green, 9
+> plugins**. All **nine** plugins are live on the LM Studio Hub under
 > [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
-> `kb-map` · `reasoning` · `data-tools` · `toolkit` · `calc-generator`.
+> `kb-map` · `reasoning` · `data-tools` · `time` · `toolkit` · `calc-generator`.
+>
+> **Next initiative — scheduling** (give the model a sense of time, then real cron via
+> an external runner): see [Scheduling initiative](#scheduling-initiative) at the end.
+> **Phase 0 (the `time` capability) is done.**
 
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the
@@ -218,3 +222,62 @@ gating, and a way to rank tool models.
 - [ ] `README.md` capability table + the plugin `README.md` updated in the shipping commit.
 - [ ] Plugin `manifest.json` `revision` bumped when its tool set changes.
 - [ ] No zod v4, no `"type":"module"` in plugin `package.json`, ESM throughout.
+
+---
+
+## Scheduling initiative
+
+Give the model a sense of "now", then real recurring tasks. The load-bearing
+constraint: **an LM Studio plugin has no execution context outside a generation
+turn** — its hooks only fire while the model is producing a response. So a true
+cron cannot live inside a plugin. Scheduling therefore splits into an authoring
+half (a plugin writes job specs) and an execution half (an external daemon, run
+on the same machine as LM Studio, reads the specs and fires them via `.act()`).
+
+Decisions (locked): full scheduling with a runner; the runner is a **new
+`packages/scheduler/` standalone daemon** (launchd/pm2 on the user's Mac); a
+fired job runs its stored **natural-language prompt agentically** via `.act()`.
+
+### Phase 0 — `time` capability ✅ DONE
+
+Deterministic date/time so the model stops guessing today's date, relative dates,
+and timezone math (the same "stop doing it in your head" rationale as data-tools).
+
+- **core/time** (`time.ts`): `formatInstant` (iso/human/date/time/unix), `tzOffsetMinutes`
+  (DST-aware via `Intl`), `parseDate`, `addDuration` (calendar months/years, end-of-month
+  clamp), `humanizeDuration`, `diff`, `zonedWallTimeToInstant`, `timeContextLine`. No deps.
+- **core/tools/time-tools** (`createTimeTools`): `now`, `time_until`, `add_duration`,
+  `diff_dates`, `convert_timezone`. Injectable clock (`options.now`) for deterministic tests.
+- **plugin-time** (new): preprocessor injects the current date/time each turn + tools
+  provider exposes the five tools; config = default timezone + two toggles. Never blocks.
+- **Wired into** `toolkit` (`enableTime` group + `timezone` global) and `agent-cli`
+  (`--tz` + the injected date line). Registered in `package-plugins.mjs`.
+- 31 tests; qa-auditor PASS (two documented DST/parse edge cases pinned). Bundles clean
+  (`Intl` only — no stray external).
+
+### Phase 1 — schedule store + authoring tools (plugin half) — NEXT
+
+- **core/schedule** `ScheduleStore` over `ScopedFs` (one file per job): `id, name,
+cron|at, timezone, prompt, model?, tools?, enabled, created, lastRun, nextRun, lastResult`.
+- Tools (mirror `remember`/`recall`/`forget`, idempotent via `writeFileIfChanged`):
+  `schedule_task`, `list_schedules`, `cancel_schedule`, `update_schedule`, `run_schedule_now`.
+- Cron **validation** only in the plugin (no heavy parser dep — keep the bundle assertion clean).
+- **Inert until the Phase 2 runner exists** — the README/plugin must say so plainly.
+
+### Phase 2 — the runner (makes it real)
+
+- New **`packages/scheduler/`** SDK app (not a plugin → free to take a `cron-parser`
+  dep). Loop: compute next-fire per enabled job → timer → on fire connect to LM Studio,
+  load the job's model, `.act(prompt, {tools})` reusing the core tool groups → write the
+  result to `runs/<id>/<ts>.md` + update `lastRun`/`lastResult`. One-shot `at` jobs disable
+  after firing. Crash-safe (persisted `lastRun`); reuses agent-cli's `--trace` JSONL.
+- Docs: keeping it alive on macOS (launchd plist / pm2 / `npm run scheduler`).
+
+### Phase 3 — polish (optional)
+
+- Route results into the KB via `write_node` (composes with kb-map); eval coverage for the
+  schedule tools.
+
+**Honest caveats (must be in the README):** the runner must be running and LM Studio up
+with the model loadable, or a job misses its window; the model must still call
+`schedule_task` correctly (Phase 0's injected date line helps it reason about "every morning").
