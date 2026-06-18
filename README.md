@@ -27,7 +27,7 @@ The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all
 | **Map memory (KB navigation)**    | Preprocessor + Tools Provider | ✅ live — `kb-map` plugin + `core/kb`                                          |
 | **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ live — `data-tools` plugin + `core/data`                                    |
 | **Date/time + timezone**          | Preprocessor + Tools Provider | ✅ live — `time` plugin + `core/time` (now/until/add/diff/convert + injection) |
-| **Scheduling (cron/one-shot)**    | Tools Provider                | ✅ live — `schedule` plugin + `core/schedule` (authoring; runner = Phase 2)    |
+| **Scheduling (cron/one-shot)**    | Tools Provider + daemon       | ✅ live — `schedule` plugin (authoring) + `scheduler` daemon (fires due jobs)  |
 | **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                                            |
 | **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                                         |
 
@@ -93,7 +93,8 @@ lmstudio-suite/
 │   ├── plugin-toolkit/       ✅ Meta-plugin (all groups via per-chat toggles)
 │   ├── plugin-generator/     ✅ Generator example (calculator replaces the LLM)
 │   ├── agent-cli/            ✅ Standalone .act() agent (composes all tools; --approve / --trace)
-│   └── eval/                 ✅ Tool-call eval harness (per-model scorecard)
+│   ├── eval/                 ✅ Tool-call eval harness (per-model scorecard)
+│   └── scheduler/            ✅ Daemon that fires scheduled jobs against LM Studio (the cron runner)
 └──
 ```
 
@@ -141,6 +142,18 @@ npm start -w @lmstudio-suite/agent-cli -- "Find the latest LM Studio release and
 ```
 
 The agent always has `web_search`, `fetch_url`, `read_file`, `write_file`, `edit_file`, `search_files`, `glob`, `list_dir`, `stat_path`, `move_file`, `make_dir`, `delete_file`, and the time tools (`now`, `time_until`, `add_duration`, `diff_dates`, `convert_timezone`) — plus the current date/time is prepended to your task; `--shell` adds `run_shell`, `--tz <zone>` sets the default timezone.
+
+### Run the scheduler daemon
+
+The `schedule` plugin/tools only **record** jobs — the **`scheduler`** daemon **runs** them (a plugin can't run on a timer). Point it at the same directory the schedule tools write to, on the machine running LM Studio, and keep it alive (launchd / pm2):
+
+```bash
+npm start -w @lmstudio-suite/scheduler -- --dir ~/.lmstudio-suite/schedules
+# polls every 30s; fires due cron/one-shot jobs via .act(); logs to <dir>/runs/<id>/<ts>.md
+# --poll <sec>, --cwd <dir>, --model <id>, --tz <zone>, --allow-shell, -h/--help
+```
+
+See **[packages/scheduler/README.md](packages/scheduler/README.md)** for the full behavior (catch-up collapse, at-least-once crash safety, the shell/cwd safety defaults).
 
 ## Develop
 

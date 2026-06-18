@@ -1,0 +1,15 @@
+{
+  "name": "@lmstudio-suite/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone scheduler daemon: reads scheduled-task specs and fires them against LM Studio on time.",
+  "scripts": {
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0",
+    "cron-parser": "^5.5.0"
+  }
+}

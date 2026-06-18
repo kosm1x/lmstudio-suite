@@ -178,6 +178,35 @@ not write it again.` The 2nd–Nth identical write becomes a free no-op the mode
   can take the dep freely; putting it in the plugin would break the bundle's "only sdk/zod/node:\*
   external" assertion. Draw the line at where the dependency would land.
 
+## The scheduler daemon (`packages/scheduler/`)
+
+- **Put a dependency where it can't leak.** Computing cron fire times needs `cron-parser`, but
+  a plugin bundle may only carry sdk/zod/node:* (the `package:plugins` assertion). So the daemon
+  — a non-plugin workspace — owns that dep; `core/schedule` stays *validation-only\*. The Phase 1
+  (plugin/core) ↔ Phase 2 (daemon) split is literally drawn at the dependency boundary. Verify by
+  grepping the dep out of every plugin bundle, not just trusting tree-shaking.
+- **Test an I/O daemon by injecting its I/O behind a port.** The whole daemon is timers + LM Studio
+  - fs, which looks untestable — but the _decisions_ aren't. Inject the clock and put the firing
+    behind a `runJob` port, and `tickOnce` becomes a pure state machine you test against a real temp
+    store with a fake `runJob` (no LM Studio, no fake timers). Only the thin real `act-runner` (the
+    actual `.act()` + run-log write) stays untested; everything that decides _what_ happens is covered.
+- **Catch-up collapse + strict-after = no double/missed fire.** Recompute "is it due" from
+  `lastRunAt` each tick (single source of truth; a stored `nextRunAt` is display-only and would
+  drift). `cron-parser`'s `next()` returns the occurrence _strictly after_ the baseline — that
+  strictness is what stops a same-tick re-fire. And because the post-fire baseline jumps to `now`,
+  a backlog of occurrences missed while the daemon was down collapses to **one** catch-up fire, not
+  a stampede. (Probe the real parser to confirm strict-after — don't assume.)
+- **A poll loop must be unkillable.** Wrap each tick in try/catch (LM Studio being down is not the
+  daemon dying), `await` the tick before sleeping (no overlapping ticks), and on SIGTERM finish the
+  current tick before exit (no half-written job file). Set `lastRunAt` even on a _failed_ fire so a
+  broken job waits for its next occurrence instead of hammering every poll.
+- **Unattended ≠ interactive — tighten the blast radius.** Defaults that are fine for the
+  hand-driven CLI are riskier for a daemon firing model-chosen tools while you're away: gate
+  `run_shell` behind an explicit operator opt-in (`--allow-shell`, off), and default the jobs'
+  working dir to a `work/` subdir so their fs tools can't rewrite the schedule specs. And be honest
+  that crash safety is **at-least-once** (a kill after `.act()` but before the save re-fires on
+  restart) — the right tradeoff for side-effecting jobs, but say so rather than claiming exactly-once.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).
