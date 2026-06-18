@@ -33,9 +33,10 @@ export interface EvalResult {
   /** Did at least one call to it have valid args? */
   validArgs: boolean;
   /**
-   * Mutating tools the model called. Every task is read-only, so a correct
-   * model calls none — a non-empty list fails the task and catches a model
-   * that "sprays" every tool to game the eval.
+   * Mutating tools the model called OTHER than the task's expected tool. A
+   * non-empty list fails the task and catches a model that "sprays" mutating
+   * tools to game the eval. (The task's own expected tool is excluded, so a
+   * task whose correct answer is itself a mutating tool can still pass.)
    */
   mutatingCalls: string[];
   /** called && validArgs && no mutating tool was called. */
@@ -57,8 +58,15 @@ export function scoreTask(task: EvalTask, calls: RecordedCall[]): EvalResult {
         return false;
       }
     });
+  // Mutating tools OTHER than the task's own expected tool. A task whose correct
+  // answer IS a mutating tool (schedule_task, cancel_schedule, …) must not
+  // self-fail; calling any OTHER mutating tool still flags a spray.
   const mutatingCalls = [
-    ...new Set(calls.filter((c) => isMutatingTool(c.name)).map((c) => c.name)),
+    ...new Set(
+      calls
+        .filter((c) => c.name !== task.expectedTool && isMutatingTool(c.name))
+        .map((c) => c.name),
+    ),
   ];
   return {
     task: task.name,

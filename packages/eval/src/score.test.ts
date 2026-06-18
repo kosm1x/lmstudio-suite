@@ -51,6 +51,28 @@ describe("scoreTask", () => {
     expect(r.pass).toBe(false);
   });
 
+  it("lets a task whose expected tool IS mutating pass, but still flags other mutating sprays", () => {
+    const scheduleTask: EvalTask = {
+      name: "schedule",
+      prompt: "schedule it",
+      expectedTool: "schedule_task",
+      validateArgs: (a) => typeof a.cron === "string",
+    };
+    // Calling the (mutating) expected tool is fine — not counted as a spray.
+    const good = scoreTask(scheduleTask, [
+      { name: "schedule_task", args: { cron: "0 8 * * *", prompt: "do it" } },
+    ]);
+    expect(good.mutatingCalls).toEqual([]);
+    expect(good.pass).toBe(true);
+    // A DIFFERENT mutating tool alongside it still fails (spray).
+    const sprayed = scoreTask(scheduleTask, [
+      { name: "schedule_task", args: { cron: "0 8 * * *", prompt: "do it" } },
+      { name: "delete_file", args: { path: "x" } },
+    ]);
+    expect(sprayed.mutatingCalls).toEqual(["delete_file"]);
+    expect(sprayed.pass).toBe(false);
+  });
+
   it("treats a throwing validator as invalid args, not a crash", () => {
     const throwy: EvalTask = {
       ...task,

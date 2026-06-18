@@ -20,6 +20,7 @@ import {
   createWebTools,
   createFsTools,
   createDataTools,
+  createScheduleTools,
   withTrace,
   type SearchConfig,
   type SearchProviderName,
@@ -60,6 +61,7 @@ async function main(): Promise<void> {
       ...createWebTools({ search }),
       ...createFsTools({ root }),
       ...createDataTools({ root }),
+      ...createScheduleTools({ root }),
     ];
     const tools = withTrace(baseTools, (t) =>
       calls.push({ name: t.name, args: t.args }),

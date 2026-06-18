@@ -70,6 +70,10 @@ export const MUTATING_TOOLS: ReadonlySet<string> = new Set([
   "forget",
   "write_node",
   "organize_incoming",
+  "schedule_task",
+  "cancel_schedule",
+  "update_schedule",
+  "run_schedule_now",
 ]);
 
 /** http_request is mutating only for non-GET/HEAD methods; others are read-only. */

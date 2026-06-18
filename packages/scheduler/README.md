@@ -24,15 +24,18 @@ Point `--dir` at the **same** directory the `schedule` plugin's _Schedule direct
 | `--model <id>`   | loaded model   | Default model for jobs that don't set one.                           |
 | `--tz <zone>`    | this machine's | Default IANA timezone.                                               |
 | `--max-rounds n` | `8`            | Max agentic rounds per job.                                          |
+| `--kb <path>`    | off            | Also write each run result into this KB dir as a kb-map node.        |
 | `--allow-shell`  | off            | Let jobs requesting the `shell` group run `run_shell` (unsandboxed). |
 
-Env fallbacks: `SCHEDULE_DIR`, `SCHEDULE_POLL_SEC`, `SCHEDULE_CWD`, `SCHEDULE_MODEL`, `SCHEDULE_TZ`, `SCHEDULE_ALLOW_SHELL`.
+Env fallbacks: `SCHEDULE_DIR`, `SCHEDULE_POLL_SEC`, `SCHEDULE_CWD`, `SCHEDULE_MODEL`, `SCHEDULE_TZ`, `SCHEDULE_KB`, `SCHEDULE_ALLOW_SHELL`.
 
 > **Safety:** `--cwd` defaults to a `work/` subdir so a job's filesystem tools can't read or rewrite the schedule specs. The `shell` group is gated behind `--allow-shell` (off by default) — an unattended daemon shouldn't run arbitrary shell on the model's say-so unless you trust every scheduled job.
 
 ## What a fired job does
 
 For each due job it loads the job's model (or the default), composes the tool groups named in the job's `tools` (default: `time`, `fs`, `data`, `web`) scoped to `--cwd`, prepends the current date/time, runs `.act(prompt)`, and writes a run log to `<dir>/runs/<id>/<timestamp>.md`. The job's `lastRunAt`/`lastResult` are updated so `list_schedules` shows the outcome.
+
+With `--kb <dir>`, each successful result is **also** written into that knowledge base as a kb-map node (`scheduled/<id>-<ts>.md`, with frontmatter), so past run outputs become navigable/retrievable via the `kb-map` plugin or the `memory` RAG over the same dir. The KB write is best-effort — a failure there never marks the run failed.
 
 ## Behavior
 

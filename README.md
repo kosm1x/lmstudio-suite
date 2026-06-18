@@ -150,7 +150,7 @@ The `schedule` plugin/tools only **record** jobs — the **`scheduler`** daemon 
 ```bash
 npm start -w @lmstudio-suite/scheduler -- --dir ~/.lmstudio-suite/schedules
 # polls every 30s; fires due cron/one-shot jobs via .act(); logs to <dir>/runs/<id>/<ts>.md
-# --poll <sec>, --cwd <dir>, --model <id>, --tz <zone>, --allow-shell, -h/--help
+# --poll <sec>, --cwd <dir>, --model <id>, --tz <zone>, --kb <dir>, --allow-shell, -h/--help
 ```
 
 See **[packages/scheduler/README.md](packages/scheduler/README.md)** for the full behavior (catch-up collapse, at-least-once crash safety, the shell/cwd safety defaults).

@@ -19,6 +19,7 @@ interface Config {
   cwd: string;
   model?: string;
   tz?: string;
+  kb?: string;
   maxRounds: number;
   allowShell: boolean;
   help: boolean;
@@ -36,12 +37,13 @@ Options:
   --cwd <path>       Working dir for the jobs' fs/data tools (default: <dir>/work)
   --model <id>       Default model for jobs that don't set one (default: loaded model)
   --tz <zone>        Default IANA timezone (default: this machine's)
+  --kb <path>        Also write each run result into this KB dir as a kb-map node
   --max-rounds <n>   Max agentic rounds per job (default 8)
   --allow-shell      Let jobs that request the 'shell' group run run_shell (off by default;
                      unsandboxed — only enable if you trust every scheduled job)
   -h, --help         Show this help
 
-Environment fallbacks: SCHEDULE_DIR, SCHEDULE_POLL_SEC, SCHEDULE_CWD, SCHEDULE_MODEL, SCHEDULE_TZ, SCHEDULE_ALLOW_SHELL
+Environment fallbacks: SCHEDULE_DIR, SCHEDULE_POLL_SEC, SCHEDULE_CWD, SCHEDULE_MODEL, SCHEDULE_TZ, SCHEDULE_KB, SCHEDULE_ALLOW_SHELL
 
 LM Studio must be running with its local server on and a tool-capable model loaded.
 Run logs are written to <dir>/runs/<id>/<timestamp>.md.`;
@@ -54,6 +56,7 @@ function parseConfig(argv: string[]): Config {
     cwd: env["SCHEDULE_CWD"] ? resolve(env["SCHEDULE_CWD"]) : "",
     model: env["SCHEDULE_MODEL"] || undefined,
     tz: env["SCHEDULE_TZ"] || undefined,
+    kb: env["SCHEDULE_KB"] ? resolve(env["SCHEDULE_KB"]) : undefined,
     maxRounds: 8,
     allowShell: /^(1|true|yes)$/i.test(env["SCHEDULE_ALLOW_SHELL"] ?? ""),
     help: false,
@@ -75,6 +78,9 @@ function parseConfig(argv: string[]): Config {
         break;
       case "--tz":
         cfg.tz = argv[++i];
+        break;
+      case "--kb":
+        cfg.kb = resolve(argv[++i] ?? ".");
         break;
       case "--max-rounds":
         cfg.maxRounds = Math.max(1, Number(argv[++i] ?? "8") || 8);
@@ -127,6 +133,7 @@ async function run(): Promise<void> {
     defaultModel: cfg.model,
     maxRounds: cfg.maxRounds,
     allowShell: cfg.allowShell,
+    kbRoot: cfg.kb,
   });
 
   let stopped = false;
