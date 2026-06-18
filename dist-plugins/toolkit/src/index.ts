@@ -6097,6 +6097,14 @@ var chatConfigSchematics = createConfigSchematics().field(
     hint: "map_overview, search_map, read_node, follow_links over the working dir."
   },
   false
+).field(
+  "enableSchedule",
+  "boolean",
+  {
+    displayName: "Scheduling",
+    hint: "schedule_task, list_schedules, cancel_schedule, update_schedule, run_schedule_now (specs under <working dir>/schedules). Off by default \u2014 needs the external scheduler daemon to actually run jobs."
+  },
+  false
 ).build();
 
 // packages/plugin-toolkit/src/tools.ts
@@ -7870,6 +7878,156 @@ function zonedWallTimeToInstant(input, tz) {
   return new Date(instant);
 }
 
+// packages/core/src/schedule/schedule.ts
+function toScheduleId(text) {
+  const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").split("-").slice(0, 8).join("-").slice(0, 60);
+  return slug || "job";
+}
+var CRON_FIELDS_5 = [
+  [0, 59],
+  // minute
+  [0, 23],
+  // hour
+  [1, 31],
+  // day of month
+  [1, 12],
+  // month
+  [0, 7]
+  // day of week (0 and 7 = Sunday)
+];
+var CRON_FIELDS_6 = [
+  [0, 59],
+  // second
+  ...CRON_FIELDS_5
+];
+function validateCronField(field, min, max) {
+  for (const part of field.split(",")) {
+    if (part === "") return false;
+    const segs = part.split("/");
+    if (segs.length > 2) return false;
+    const range = segs[0] ?? "";
+    const step = segs[1];
+    if (step !== void 0 && (!/^\d+$/.test(step) || Number(step) === 0)) {
+      return false;
+    }
+    if (range === "*") continue;
+    const m = range.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) return false;
+    const lo = Number(m[1]);
+    const hi = m[2] !== void 0 ? Number(m[2]) : lo;
+    if (lo < min || hi > max || lo > hi) return false;
+  }
+  return true;
+}
+function validateCron(expr) {
+  const fields = expr.trim().split(/\s+/).filter(Boolean);
+  const spec = fields.length === 5 ? CRON_FIELDS_5 : fields.length === 6 ? CRON_FIELDS_6 : null;
+  if (!spec) {
+    return {
+      ok: false,
+      reason: `expected 5 or 6 fields, got ${fields.length} ("${expr.trim()}")`
+    };
+  }
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i] ?? "";
+    const bounds = spec[i];
+    if (!bounds) continue;
+    if (!validateCronField(field, bounds[0], bounds[1])) {
+      return {
+        ok: false,
+        reason: `invalid cron field "${field}" at position ${i + 1}`
+      };
+    }
+  }
+  return { ok: true };
+}
+function normalizeSpec(s) {
+  return JSON.stringify({
+    name: s.name,
+    cron: s.cron ?? null,
+    at: s.at ?? null,
+    timezone: s.timezone,
+    prompt: s.prompt,
+    model: s.model ?? null,
+    tools: s.tools ?? null,
+    enabled: s.enabled
+  });
+}
+function specEquals(a, b) {
+  return normalizeSpec(a) === normalizeSpec(b);
+}
+var ScheduleStore = class {
+  fs;
+  subdir;
+  constructor(root, subdir = "schedules") {
+    this.fs = new ScopedFs(root);
+    this.subdir = subdir.replace(/\/+$/, "") || "schedules";
+  }
+  rel(id) {
+    return `${this.subdir}/${id}.json`;
+  }
+  async get(id) {
+    const raw = await this.fs.readFileFull(this.rel(id)).catch(() => null);
+    if (raw === null) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  async exists(id) {
+    return this.fs.exists(this.rel(id));
+  }
+  async list() {
+    if (!await this.fs.exists(this.subdir)) return [];
+    const jobs = [];
+    for (const entry of await this.fs.list(this.subdir)) {
+      if (entry.type !== "file" || !entry.name.endsWith(".json")) continue;
+      const raw = await this.fs.readFileFull(`${this.subdir}/${entry.name}`).catch(() => null);
+      if (raw === null) continue;
+      try {
+        jobs.push(JSON.parse(raw));
+      } catch {
+        continue;
+      }
+    }
+    jobs.sort((a, b) => a.id.localeCompare(b.id));
+    return jobs;
+  }
+  /** Write the job atomically; returns false if it was already identical. */
+  async save(job) {
+    return this.fs.writeFileIfChanged(
+      this.rel(job.id),
+      JSON.stringify(job, null, 2) + "\n"
+    );
+  }
+  async remove(id) {
+    if (!await this.fs.exists(this.rel(id))) return false;
+    await this.fs.remove(this.rel(id));
+    return true;
+  }
+};
+async function upsertSpec(store, id, spec, now) {
+  const existing = await store.get(id);
+  if (existing && specEquals(existing, spec)) {
+    return { status: "unchanged", job: existing };
+  }
+  const iso = now.toISOString();
+  const job = {
+    id,
+    ...spec,
+    createdAt: existing?.createdAt ?? iso,
+    updatedAt: iso,
+    lastRunAt: existing?.lastRunAt,
+    lastResult: existing?.lastResult,
+    nextRunAt: spec.at,
+    // `at` → that instant; cron → undefined (daemon fills)
+    runRequestedAt: existing?.runRequestedAt
+  };
+  await store.save(job);
+  return { status: existing ? "updated" : "created", job };
+}
+
 // packages/core/src/tools/web-tools.ts
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
@@ -9107,6 +9265,229 @@ ISO: ${iso}${note}`;
   ];
 }
 
+// packages/core/src/tools/schedule-tools.ts
+import { tool as tool8 } from "@lmstudio/sdk";
+import { z as z8 } from "zod";
+var msg7 = (err) => err instanceof Error ? err.message : String(err);
+var DAEMON_NOTE = "Note: scheduled jobs only run while the scheduler daemon is running \u2014 this records the job, it does not execute it.";
+function formatJob(job) {
+  const when = job.cron ? `cron "${job.cron}"` : `at ${job.at}`;
+  const state = job.enabled ? "enabled" : "disabled";
+  const last = job.lastRunAt ? ` | last run ${job.lastRunAt}` : "";
+  const next = job.nextRunAt ? ` | next ${job.nextRunAt}` : "";
+  const pending = job.runRequestedAt ? " | run requested" : "";
+  return `[${job.id}] ${job.name} \u2014 ${when} (${job.timezone}), ${state}${next}${last}${pending}`;
+}
+function createScheduleTools(options) {
+  const store = new ScheduleStore(options.root, options.subdir);
+  const now = options.now ?? (() => /* @__PURE__ */ new Date());
+  const defaultTz = options.defaultTimezone?.trim() ? options.defaultTimezone.trim() : hostTimezone();
+  function validateTiming(cron, at, timezone) {
+    if (cron && at) return "provide either cron or at, not both";
+    if (!cron && !at) return "provide a schedule: either cron or at";
+    if (cron) {
+      const v = validateCron(cron);
+      if (!v.ok) return `invalid cron: ${v.reason}`;
+    }
+    if (at) {
+      try {
+        parseDate(at);
+      } catch (err) {
+        return msg7(err);
+      }
+    }
+    try {
+      assertTimezone(timezone);
+    } catch (err) {
+      return msg7(err);
+    }
+    return null;
+  }
+  return [
+    tool8({
+      name: "schedule_task",
+      description: "Schedule a task to run later \u2014 either on a recurring cron schedule or once at a specific time. The task is a natural-language instruction the agent will carry out when it fires. Re-running with the same name updates that schedule in place. " + DAEMON_NOTE,
+      parameters: {
+        name: z8.string().describe(
+          "Short name for the schedule (also its id), e.g. 'morning briefing'."
+        ),
+        prompt: z8.string().describe("The task to perform when it fires, in plain language."),
+        cron: z8.string().optional().describe(
+          "Cron expression (5 or 6 fields), e.g. '0 9 * * *' for 9am daily."
+        ),
+        at: z8.string().optional().describe(
+          "One-shot ISO-8601 datetime, e.g. '2026-12-25T09:00:00Z'. Use instead of cron."
+        ),
+        timezone: z8.string().optional().describe(
+          `IANA timezone for a cron schedule. Default: ${defaultTz}.`
+        ),
+        model: z8.string().optional().describe(
+          "Optional model id the run should use (default: the loaded model)."
+        ),
+        tools: z8.array(z8.string()).optional().describe(
+          "Optional tool groups the run should enable (e.g. ['web','fs'])."
+        ),
+        id: z8.string().optional().describe(
+          "Explicit id to create/overwrite. Omit to derive it from the name."
+        )
+      },
+      implementation: async ({ name, prompt, cron, at, timezone, model, tools, id }, { status, warn }) => {
+        status("schedule_task");
+        if (!name.trim()) return "Error: name must not be empty.";
+        if (!prompt.trim()) return "Error: prompt must not be empty.";
+        const tz = timezone?.trim() || defaultTz;
+        const bad = validateTiming(cron, at, tz);
+        if (bad) return `Error: ${bad}.`;
+        try {
+          const spec = {
+            name: name.trim(),
+            cron,
+            at,
+            timezone: tz,
+            prompt: prompt.trim(),
+            model,
+            tools,
+            enabled: true
+          };
+          const jobId = toScheduleId(id?.trim() || name);
+          const { status: st, job } = await upsertSpec(
+            store,
+            jobId,
+            spec,
+            now()
+          );
+          const past = at && parseDate(at).getTime() < now().getTime() ? " WARNING: that time is in the past and will not fire." : "";
+          if (st === "unchanged")
+            return `Already scheduled as "${job.id}" \u2014 unchanged. ${DAEMON_NOTE}`;
+          return `${st === "created" ? "Scheduled" : "Updated"} "${job.id}": ${formatJob(job)}.${past}
+${DAEMON_NOTE}`;
+        } catch (err) {
+          warn(`schedule_task failed: ${msg7(err)}`);
+          return `Error: ${msg7(err)}`;
+        }
+      }
+    }),
+    tool8({
+      name: "list_schedules",
+      description: "List saved scheduled tasks with their timing, enabled state, and last/next run. Use to see what is scheduled or to find an id to update or cancel.",
+      parameters: {
+        enabled_only: z8.boolean().default(false).describe("Only show enabled schedules.")
+      },
+      implementation: async ({ enabled_only }, { status, warn }) => {
+        status("list_schedules");
+        try {
+          let jobs = await store.list();
+          if (enabled_only) jobs = jobs.filter((j) => j.enabled);
+          if (jobs.length === 0) return "No schedules.";
+          return `${jobs.map(formatJob).join("\n")}
+
+${DAEMON_NOTE}`;
+        } catch (err) {
+          warn(`list_schedules failed: ${msg7(err)}`);
+          return `Error: ${msg7(err)}`;
+        }
+      }
+    }),
+    tool8({
+      name: "cancel_schedule",
+      description: "Delete a scheduled task by its id (use list_schedules to find it). Irreversible.",
+      parameters: {
+        id: z8.string().describe("The id of the schedule to cancel.")
+      },
+      implementation: async ({ id }, { status, warn }) => {
+        status("cancel_schedule");
+        try {
+          const safeId = toScheduleId(id);
+          const removed = await store.remove(safeId);
+          return removed ? `Cancelled "${safeId}".` : `No schedule with id "${id}". Use list_schedules to see ids.`;
+        } catch (err) {
+          warn(`cancel_schedule failed: ${msg7(err)}`);
+          return `Error: ${msg7(err)}`;
+        }
+      }
+    }),
+    tool8({
+      name: "update_schedule",
+      description: "Change fields of an existing schedule (its timing, prompt, timezone, model, tools, or enable/disable it). Only the fields you pass change. Switch timing by passing the new cron OR at (the other is cleared).",
+      parameters: {
+        id: z8.string().describe("The id of the schedule to update."),
+        name: z8.string().optional().describe("New display name."),
+        prompt: z8.string().optional().describe("New task instruction."),
+        cron: z8.string().optional().describe("New cron expression (clears any `at`)."),
+        at: z8.string().optional().describe("New one-shot datetime (clears any cron)."),
+        timezone: z8.string().optional().describe("New IANA timezone."),
+        model: z8.string().optional().describe("New model id."),
+        tools: z8.array(z8.string()).optional().describe("New tool-group list."),
+        enabled: z8.boolean().optional().describe("Enable (true) or disable (false) the schedule.")
+      },
+      implementation: async ({ id, name, prompt, cron, at, timezone, model, tools, enabled }, { status, warn }) => {
+        status("update_schedule");
+        try {
+          const safeId = toScheduleId(id);
+          const existing = await store.get(safeId);
+          if (!existing)
+            return `No schedule with id "${id}". Use list_schedules to see ids.`;
+          if (cron && at) return "Error: provide either cron or at, not both.";
+          let nextCron = existing.cron;
+          let nextAt = existing.at;
+          if (cron) {
+            nextCron = cron;
+            nextAt = void 0;
+          } else if (at) {
+            nextAt = at;
+            nextCron = void 0;
+          }
+          const tz = timezone?.trim() || existing.timezone;
+          const bad = validateTiming(nextCron, nextAt, tz);
+          if (bad) return `Error: ${bad}.`;
+          const spec = {
+            name: name?.trim() || existing.name,
+            cron: nextCron,
+            at: nextAt,
+            timezone: tz,
+            prompt: prompt?.trim() || existing.prompt,
+            model: model ?? existing.model,
+            tools: tools ?? existing.tools,
+            enabled: enabled ?? existing.enabled
+          };
+          const { status: st, job } = await upsertSpec(
+            store,
+            safeId,
+            spec,
+            now()
+          );
+          return st === "unchanged" ? `No change to "${job.id}".` : `Updated "${job.id}": ${formatJob(job)}.`;
+        } catch (err) {
+          warn(`update_schedule failed: ${msg7(err)}`);
+          return `Error: ${msg7(err)}`;
+        }
+      }
+    }),
+    tool8({
+      name: "run_schedule_now",
+      description: "Request that a scheduled task run as soon as possible (on the scheduler's next poll), without waiting for its scheduled time. Useful for testing a schedule. " + DAEMON_NOTE,
+      parameters: {
+        id: z8.string().describe("The id of the schedule to run now.")
+      },
+      implementation: async ({ id }, { status, warn }) => {
+        status("run_schedule_now");
+        try {
+          const safeId = toScheduleId(id);
+          const job = await store.get(safeId);
+          if (!job)
+            return `No schedule with id "${id}". Use list_schedules to see ids.`;
+          job.runRequestedAt = now().toISOString();
+          await store.save(job);
+          return `Queued "${safeId}" to run on the scheduler's next poll. ${DAEMON_NOTE}`;
+        } catch (err) {
+          warn(`run_schedule_now failed: ${msg7(err)}`);
+          return `Error: ${msg7(err)}`;
+        }
+      }
+    })
+  ];
+}
+
 // packages/plugin-toolkit/src/tools.ts
 async function resolveRoot(ctl, configuredDir) {
   const dir = (configuredDir ?? "").trim();
@@ -9167,6 +9548,14 @@ async function toolsProvider(ctl) {
     let graph;
     const loadGraph = async () => graph ??= (await scanKbDir(root)).graph;
     tools.push(...createMapTools({ root, loadGraph }));
+  }
+  if (chat.get("enableSchedule")) {
+    tools.push(
+      ...createScheduleTools({
+        root,
+        defaultTimezone: global2.get("timezone") || void 0
+      })
+    );
   }
   return tools;
 }

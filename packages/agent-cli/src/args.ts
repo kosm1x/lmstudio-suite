@@ -11,6 +11,8 @@ export interface CliArgs {
   kb?: string;
   /** Directory for the writable memory tools remember/recall/forget (absolute). */
   memory?: string;
+  /** Directory for the schedule-authoring tools (absolute). */
+  schedule?: string;
   /** Expose the data tools (calculator / json / csv / sqlite). */
   data: boolean;
   /** Default IANA timezone for the time tools + injected date/time line. */
@@ -50,6 +52,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case "--memory":
         args.memory = resolve(argv[++i] ?? ".");
+        break;
+      case "--schedule":
+        args.schedule = resolve(argv[++i] ?? ".");
         break;
       case "--max-rounds":
         args.maxRounds = Math.max(1, Number(argv[++i] ?? "8") || 8);
@@ -95,6 +100,7 @@ Options:
       --shell          Enable the run_shell tool (off by default)
       --kb <dir>       Knowledge-base dir to expose as map-memory tools
       --memory <dir>   Dir for writable memory tools (remember / recall / forget)
+      --schedule <dir> Dir for schedule-authoring tools (needs the scheduler daemon to run jobs)
       --data           Enable the data tools (calculator / json / csv / sqlite)
       --tz <zone>      Default IANA timezone for the time tools (default: this machine's)
       --approve        Ask y/N before each mutating tool (write/delete/shell/http…)
@@ -112,4 +118,5 @@ the time tools (now, time_until, add_duration, diff_dates, convert_timezone). Th
 current date/time is also prepended to your task so the model never guesses it.
 With --shell it also gets run_shell (commands run with your privileges).
 With --kb it also gets map_overview, search_map, read_node, follow_links over
-that knowledge base.`;
+that knowledge base; --memory adds remember/recall/forget; --schedule adds the
+schedule-authoring tools (which need the scheduler daemon to actually run jobs).`;

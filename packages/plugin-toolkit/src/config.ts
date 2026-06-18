@@ -134,4 +134,13 @@ export const chatConfigSchematics = createConfigSchematics()
     },
     false,
   )
+  .field(
+    "enableSchedule",
+    "boolean",
+    {
+      displayName: "Scheduling",
+      hint: "schedule_task, list_schedules, cancel_schedule, update_schedule, run_schedule_now (specs under <working dir>/schedules). Off by default — needs the external scheduler daemon to actually run jobs.",
+    },
+    false,
+  )
   .build();

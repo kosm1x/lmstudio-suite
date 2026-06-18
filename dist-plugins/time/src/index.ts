@@ -179,6 +179,25 @@ function zonedWallTimeToInstant(input, tz) {
   return new Date(instant);
 }
 
+// packages/core/src/schedule/schedule.ts
+var CRON_FIELDS_5 = [
+  [0, 59],
+  // minute
+  [0, 23],
+  // hour
+  [1, 31],
+  // day of month
+  [1, 12],
+  // month
+  [0, 7]
+  // day of week (0 and 7 = Sunday)
+];
+var CRON_FIELDS_6 = [
+  [0, 59],
+  // second
+  ...CRON_FIELDS_5
+];
+
 // packages/core/src/tools/web-tools.ts
 import { tool } from "@lmstudio/sdk";
 import { z } from "zod";
@@ -359,6 +378,10 @@ ISO: ${iso}${note}`;
     })
   ];
 }
+
+// packages/core/src/tools/schedule-tools.ts
+import { tool as tool8 } from "@lmstudio/sdk";
+import { z as z8 } from "zod";
 
 // packages/plugin-time/src/config.ts
 import { createConfigSchematics } from "@lmstudio/sdk";

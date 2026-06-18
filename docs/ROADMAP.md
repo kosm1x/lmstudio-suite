@@ -1,14 +1,14 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
 > **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
-> merged to `main` (PR #2, merge `7410bfc`). The suite is now **287 tests green, 9
-> plugins**. All **nine** plugins are live on the LM Studio Hub under
+> merged to `main` (PR #2, merge `7410bfc`). The suite is now **307 tests green, 10
+> plugins**. All **ten** plugins are live on the LM Studio Hub under
 > [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
-> `kb-map` · `reasoning` · `data-tools` · `time` · `toolkit` · `calc-generator`.
+> `kb-map` · `reasoning` · `data-tools` · `time` · `schedule` · `toolkit` · `calc-generator`.
 >
-> **Next initiative — scheduling** (give the model a sense of time, then real cron via
+> **Active initiative — scheduling** (give the model a sense of time, then real cron via
 > an external runner): see [Scheduling initiative](#scheduling-initiative) at the end.
-> **Phase 0 (the `time` capability) is done.**
+> **Phase 0 (`time`) and Phase 1 (`schedule` authoring) are done; Phase 2 (the daemon) is next.**
 
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the
@@ -255,22 +255,36 @@ and timezone math (the same "stop doing it in your head" rationale as data-tools
 - 31 tests; qa-auditor PASS (two documented DST/parse edge cases pinned). Bundles clean
   (`Intl` only — no stray external).
 
-### Phase 1 — schedule store + authoring tools (plugin half) — NEXT
+### Phase 1 — schedule store + authoring tools (plugin half) ✅ DONE
 
-- **core/schedule** `ScheduleStore` over `ScopedFs` (one file per job): `id, name,
-cron|at, timezone, prompt, model?, tools?, enabled, created, lastRun, nextRun, lastResult`.
-- Tools (mirror `remember`/`recall`/`forget`, idempotent via `writeFileIfChanged`):
-  `schedule_task`, `list_schedules`, `cancel_schedule`, `update_schedule`, `run_schedule_now`.
-- Cron **validation** only in the plugin (no heavy parser dep — keep the bundle assertion clean).
-- **Inert until the Phase 2 runner exists** — the README/plugin must say so plainly.
+The authoring half. Records job specs; the Phase 2 daemon executes them. Inert until
+that daemon runs, and every tool/README says so (a plugin can't run on a timer).
 
-### Phase 2 — the runner (makes it real)
+- **`core/schedule/schedule.ts`** — `ScheduleStore` over `ScopedFs` (one JSON per job:
+  `id, name, cron|at, timezone, prompt, model?, tools?, enabled, createdAt, updatedAt,
+lastRunAt?, lastResult?, nextRunAt?, runRequestedAt?`); dependency-free `validateCron`
+  (5/6-field, ranges/lists/steps — NOT a parser); `specEquals`; `upsertSpec` (idempotent:
+  identical re-author → "unchanged", no `updatedAt` churn; preserves `createdAt` + runtime
+  fields); `toScheduleId` (sanitizes a model-controlled id → no path escape).
+- **`core/tools/schedule-tools.ts`** `createScheduleTools`: `schedule_task` (cron OR at,
+  exactly one), `list_schedules`, `cancel_schedule`, `update_schedule`, `run_schedule_now`
+  (sets a `runRequestedAt` marker the daemon honors). Errors-as-string.
+- **`plugin-schedule`** (new, 10th) — Tools Provider; global `scheduleDir` (blank = inert)
+  - `timezone`. Wired into `toolkit` (`enableSchedule` group, default OFF) + `agent-cli`
+    (`--schedule <dir>`). Registered in `package-plugins.mjs`.
+- 28 tests (incl. an id-traversal regression); qa-auditor PASS (no Critical/Warning).
+
+### Phase 2 — the runner (makes it real) — NEXT
 
 - New **`packages/scheduler/`** SDK app (not a plugin → free to take a `cron-parser`
   dep). Loop: compute next-fire per enabled job → timer → on fire connect to LM Studio,
   load the job's model, `.act(prompt, {tools})` reusing the core tool groups → write the
-  result to `runs/<id>/<ts>.md` + update `lastRun`/`lastResult`. One-shot `at` jobs disable
-  after firing. Crash-safe (persisted `lastRun`); reuses agent-cli's `--trace` JSONL.
+  result to `runs/<id>/<ts>.md` + update `lastRunAt`/`lastResult`. One-shot `at` jobs
+  disable after firing; honor `runRequestedAt` (fire once, then clear it). Crash-safe
+  (persisted `lastRunAt`); reuses agent-cli's `--trace` JSONL.
+- **Contract from Phase 1:** treat `nextRunAt === undefined` on a **cron** job as
+  "recompute the next fire" (a non-timing edit resets it); for an **`at`** job `nextRunAt`
+  is the fire instant. Read the store at `<scheduleDir>/schedules/*.json`.
 - Docs: keeping it alive on macOS (launchd plist / pm2 / `npm run scheduler`).
 
 ### Phase 3 — polish (optional)
