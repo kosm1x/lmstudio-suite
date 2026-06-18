@@ -1,14 +1,14 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
 > **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
-> merged to `main` (PR #2, merge `7410bfc`). The suite is now **307 tests green, 10
-> plugins**. All **ten** plugins are live on the LM Studio Hub under
+> merged to `main` (PR #2, merge `7410bfc`). The suite is now **322 tests green, 10
+> plugins + a scheduler daemon**. All **ten** plugins are live on the LM Studio Hub under
 > [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
 > `kb-map` · `reasoning` · `data-tools` · `time` · `schedule` · `toolkit` · `calc-generator`.
 >
-> **Active initiative — scheduling** (give the model a sense of time, then real cron via
-> an external runner): see [Scheduling initiative](#scheduling-initiative) at the end.
-> **Phase 0 (`time`) and Phase 1 (`schedule` authoring) are done; Phase 2 (the daemon) is next.**
+> **Scheduling initiative — Phases 0–2 SHIPPED** (a sense of time → schedule authoring →
+> the daemon that fires jobs): see [Scheduling initiative](#scheduling-initiative) at the end.
+> **The cron is real now.** Phase 3 (polish) is optional.
 
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the
@@ -274,18 +274,29 @@ lastRunAt?, lastResult?, nextRunAt?, runRequestedAt?`); dependency-free `validat
     (`--schedule <dir>`). Registered in `package-plugins.mjs`.
 - 28 tests (incl. an id-traversal regression); qa-auditor PASS (no Critical/Warning).
 
-### Phase 2 — the runner (makes it real) — NEXT
+### Phase 2 — the runner (makes it real) ✅ DONE
 
-- New **`packages/scheduler/`** SDK app (not a plugin → free to take a `cron-parser`
-  dep). Loop: compute next-fire per enabled job → timer → on fire connect to LM Studio,
-  load the job's model, `.act(prompt, {tools})` reusing the core tool groups → write the
-  result to `runs/<id>/<ts>.md` + update `lastRunAt`/`lastResult`. One-shot `at` jobs
-  disable after firing; honor `runRequestedAt` (fire once, then clear it). Crash-safe
-  (persisted `lastRunAt`); reuses agent-cli's `--trace` JSONL.
-- **Contract from Phase 1:** treat `nextRunAt === undefined` on a **cron** job as
-  "recompute the next fire" (a non-timing edit resets it); for an **`at`** job `nextRunAt`
-  is the fire instant. Read the store at `<scheduleDir>/schedules/*.json`.
-- Docs: keeping it alive on macOS (launchd plist / pm2 / `npm run scheduler`).
+The cron is real. New **`packages/scheduler/`** SDK app (not a plugin → it takes the
+`cron-parser` dep that a plugin bundle can't — `cron-parser` lives ONLY here, verified
+absent from every plugin bundle).
+
+- **`src/eval.ts`** (pure) — `isDue(job, now)` + `advanceCron(cron, tz, from)` via
+  `cron-parser` v5 (`CronExpressionParser.parse(...).next()`, which is strictly-after →
+  no same-tick re-fire). Cron baseline = `lastRunAt ?? createdAt`, so missed occurrences
+  **collapse to one catch-up fire**.
+- **`src/runner.ts`** — `tickOnce(store, now, runJob, log)`: find due → fire via an
+  injected `runJob` **port** → persist `lastRunAt`/`lastResult`/`nextRunAt`, disable
+  one-shot `at` jobs, clear `runRequestedAt`. A thrown job is caught (pass continues);
+  `lastRunAt` is set on failure too (no retry storm). Tested with a real temp store + a
+  fake `runJob` + a fixed clock.
+- **`src/act-runner.ts`** — the real `runJob`: connect to LM Studio, compose the core
+  tool builders named by the job (default `time`/`fs`/`data`/`web`, scoped to `--cwd`),
+  `.act(prompt)`, write `runs/<id>/<ts>.md`. **Shell gated behind `--allow-shell`**
+  (off); `--cwd` defaults to `<dir>/work` (jobs can't touch the spec files).
+- **`src/main.ts`** — config (args + env) + resilient poll loop (tick errors never kill
+  it; no overlapping ticks) + graceful SIGINT/SIGTERM shutdown.
+- 17 tests; qa-auditor PASS-with-warnings (both warnings fixed: shell gate + cwd default).
+  Crash safety is honestly **at-least-once** (a mid-tick kill can re-fire — right tradeoff).
 
 ### Phase 3 — polish (optional)
 
