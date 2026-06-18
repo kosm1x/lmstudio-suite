@@ -26,6 +26,7 @@ import {
 } from "@lmstudio-suite/core";
 import type { LMStudioClient, Tool } from "@lmstudio/sdk";
 import type { RunJob } from "./runner";
+import { buildScheduledNote } from "./kb-sink";
 
 /** Tool groups a job gets when it does not name any explicitly. */
 const DEFAULT_GROUPS = ["time", "fs", "data", "web"];
@@ -35,6 +36,8 @@ export interface ActRunnerOptions {
   cwd: string;
   /** Directory run logs are written under (e.g. <scheduleDir>/runs). */
   runsRoot: string;
+  /** Optional KB dir to ALSO write each result into as a kb-map node. */
+  kbRoot?: string;
   /** Default timezone for the time tools + injected date line. */
   defaultTimezone?: string;
   /** Default model id for jobs that don't set one (default: the loaded model). */
@@ -101,6 +104,7 @@ export function createActRunner(options: ActRunnerOptions): RunJob {
   const fallbackTz = options.defaultTimezone?.trim() || hostTimezone();
   const maxRounds = options.maxRounds ?? 8;
   const runs = new ScopedFs(options.runsRoot);
+  const kb = options.kbRoot ? new ScopedFs(options.kbRoot) : null;
 
   return async (job: ScheduleJob): Promise<string> => {
     const client = options.client ?? createClient();
@@ -139,6 +143,23 @@ export function createActRunner(options: ActRunnerOptions): RunJob {
       `- tools: ${tools.map((t) => t.name).join(", ")}\n\n` +
       `## Prompt\n\n${job.prompt}\n\n## Result\n\n${text || "(no text output)"}\n`;
     await runs.writeFile(`${job.id}/${fsSafeStamp(firedAt)}.md`, body);
+
+    // Opt-in: also route the result into the KB as a kb-map node so it's
+    // navigable/retrievable later (composes with the kb-map plugin/memory RAG).
+    // Best-effort: the run already succeeded and its run log is written, so a
+    // KB-write failure must NOT mark the run failed (it would mislabel success,
+    // permanently for one-shot jobs).
+    if (kb) {
+      try {
+        const note = buildScheduledNote(job, text, firedAt);
+        await kb.writeFile(note.path, note.content);
+      } catch (err) {
+        process.stderr.write(
+          `[scheduler] KB write failed for "${job.id}": ` +
+            `${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      }
+    }
 
     return text || `(completed in ${result.rounds} round(s), no text output)`;
   };

@@ -1,14 +1,15 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
 > **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
-> merged to `main` (PR #2, merge `7410bfc`). The suite is now **322 tests green, 10
+> merged to `main` (PR #2, merge `7410bfc`). The suite is now **326 tests green, 10
 > plugins + a scheduler daemon**. All **ten** plugins are live on the LM Studio Hub under
 > [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
 > `kb-map` · `reasoning` · `data-tools` · `time` · `schedule` · `toolkit` · `calc-generator`.
 >
-> **Scheduling initiative — Phases 0–2 SHIPPED** (a sense of time → schedule authoring →
-> the daemon that fires jobs): see [Scheduling initiative](#scheduling-initiative) at the end.
-> **The cron is real now.** Phase 3 (polish) is optional.
+> **Scheduling initiative — COMPLETE (Phases 0–3 shipped)** (a sense of time → schedule
+> authoring → the daemon that fires jobs → results routed into the KB): see
+> [Scheduling initiative](#scheduling-initiative) at the end. **The cron is real, and its
+> outputs are knowledge.**
 
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the
@@ -298,10 +299,20 @@ absent from every plugin bundle).
 - 17 tests; qa-auditor PASS-with-warnings (both warnings fixed: shell gate + cwd default).
   Crash safety is honestly **at-least-once** (a mid-tick kill can re-fire — right tradeoff).
 
-### Phase 3 — polish (optional)
+### Phase 3 — polish ✅ DONE
 
-- Route results into the KB via `write_node` (composes with kb-map); eval coverage for the
-  schedule tools.
+- **Results → KB.** `scheduler/src/kb-sink.ts` `buildScheduledNote` renders each successful
+  run as a kb-map node (suite frontmatter + body) under `scheduled/<id>-<ts>.md`; wired into
+  `act-runner` behind `--kb`/`SCHEDULE_KB`. **Best-effort** — a KB-write failure never marks
+  the run failed. Tested by round-tripping through `scanKbDir` (the node is really indexed),
+  incl. a hostile-`job.name` case (the wrapping `description:` scalar + `oneLine()` keep an
+  injection trapped — no type/tier flip).
+- **Eval coverage for the schedule tools.** Added 4 tasks (`schedule_task` cron + one-shot,
+  `list_schedules`, `cancel_schedule`) and exposed the schedule tools in the eval toolset.
+  This required the eval's anti-spray to **exclude the task's own expected tool** from the
+  mutating penalty (a task whose correct answer IS a mutating tool must not self-fail), and
+  classifying the 4 write schedule tools in `MUTATING_TOOLS` (grep-sweep; also gives them
+  `--approve` gating in agent-cli). `list_schedules` stays read-only.
 
 **Honest caveats (must be in the README):** the runner must be running and LM Studio up
 with the model loadable, or a job misses its window; the model must still call

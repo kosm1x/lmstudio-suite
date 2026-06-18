@@ -30,8 +30,12 @@ describe("isMutatingTool", () => {
     expect(isMutatingTool("delete_file")).toBe(true);
     expect(isMutatingTool("run_shell")).toBe(true);
     expect(isMutatingTool("http_request")).toBe(true);
+    expect(isMutatingTool("schedule_task")).toBe(true);
+    expect(isMutatingTool("cancel_schedule")).toBe(true);
     expect(isMutatingTool("read_file")).toBe(false);
     expect(isMutatingTool("search_files")).toBe(false);
+    expect(isMutatingTool("list_schedules")).toBe(false);
+    expect(isMutatingTool("now")).toBe(false);
   });
 });
 

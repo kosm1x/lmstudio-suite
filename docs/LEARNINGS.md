@@ -206,6 +206,24 @@ not write it again.` The 2nd–Nth identical write becomes a free no-op the mode
   working dir to a `work/` subdir so their fs tools can't rewrite the schedule specs. And be honest
   that crash safety is **at-least-once** (a kill after `.act()` but before the save re-fires on
   restart) — the right tradeoff for side-effecting jobs, but say so rather than claiming exactly-once.
+- **Best-effort enrichment must never fail the primary operation.** The `--kb` routing (write the
+  run result into the KB as a kb-map node) is _secondary_ — the run already succeeded and its run log
+  is on disk. An un-try/caught KB write would let a disk hiccup throw out of `runJob`, which `tickOnce`
+  reads as a _failed run_ — mislabeling success, and permanently for a one-shot that's already fired
+  and disabled. Wrap the secondary write, log, and swallow. A side effect downstream of the real work
+  must not be able to fail the real work.
+- **Interpolating a model-authored field into frontmatter is an injection vector.** The KB node's
+  `description:` embeds `job.name`; a name with newlines + `tier: warm` / `metadata:\n  type: project`
+  could break out and flip the node's tier/type. Defense: `oneLine()` (collapse whitespace) **plus** a
+  wrapping prefix (`description: Scheduled run of "<name>" at …`) keep it trapped in one scalar. Pin it
+  with a _hostile-input round-trip_ test (build the note, `scanKbDir`, assert no type/tier flip) — a
+  happy-path round-trip alone wouldn't catch a future refactor to a bare `description: ${job.name}`.
+- **An anti-spray eval that bans all mutating calls can't score a mutating tool.** The tool-call eval
+  fails any task where a mutating tool was called (catches a model that sprays writes) — but a
+  `schedule_task`/`cancel_schedule` task's _correct_ answer IS a mutating call, so it self-failed.
+  Fix: exclude the task's _own expected tool_ from the mutating penalty (other mutating sprays still
+  fail). And when you add mutating tools, grep-sweep the `MUTATING_TOOLS` set so `--approve` gating and
+  the eval both see them.
 
 ## Verifying a publish
 
