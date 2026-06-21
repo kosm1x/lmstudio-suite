@@ -60,10 +60,12 @@ describe("createMapTools", () => {
     ).toEqual(["follow_links", "map_overview", "read_node", "search_map"]);
   });
 
-  it("adds write_node + organize_incoming only when enabled", () => {
+  it("adds write_node + organize_incoming + lint_map only when enabled", () => {
     const names = make(true).map((t) => t.name);
     expect(names).toContain("write_node");
     expect(names).toContain("organize_incoming");
+    expect(names).toContain("lint_map");
+    expect(make().map((t) => t.name)).not.toContain("lint_map");
   });
 
   it("map_overview renders the digest and a single folder", async () => {
@@ -107,28 +109,29 @@ describe("createMapTools", () => {
     expect(backOut).toContain("alpha");
   });
 
-  it("write_node writes text notes within the root", async () => {
+  it("write_node writes a graph-valid note within the root", async () => {
+    const content = "---\nname: new\n---\n# fresh\nsee [[beta]]";
     const out = await call(make(true), "write_node", {
       path: "notes/new.md",
-      content: "# fresh",
+      content,
     });
     expect(out).toMatch(/Wrote \d+ characters/);
     expect(await fsp.readFile(join(root, "notes", "new.md"), "utf-8")).toBe(
-      "# fresh",
+      content,
     );
   });
 
   it("write_node reports a no-op when re-writing identical content", async () => {
     const tools = make(true);
-    // Unique path — this test file shares one root across its tests.
+    const content = "---\nname: idem\n---\n# idempotent\nlinks [[beta]]";
     const first = await call(tools, "write_node", {
       path: "notes/idem.md",
-      content: "# idempotent",
+      content,
     });
     expect(first).toMatch(/Wrote \d+ characters/);
     const again = await call(tools, "write_node", {
       path: "notes/idem.md",
-      content: "# idempotent",
+      content,
     });
     expect(again).toMatch(/No change/);
     expect(again).toMatch(/do not write it again/);
@@ -141,6 +144,43 @@ describe("createMapTools", () => {
     });
     expect(out).toMatch(/only writes text notes/);
     await expect(fsp.access(join(root, "evil.sh"))).rejects.toThrow();
+  });
+
+  it("write_node enforces the convention: refuses a note with no frontmatter", async () => {
+    const out = await call(make(true), "write_node", {
+      path: "notes/bare.md",
+      content: "# just a title\nsee [[beta]]",
+    });
+    expect(out).toMatch(/missing YAML frontmatter/);
+    await expect(fsp.access(join(root, "notes", "bare.md"))).rejects.toThrow();
+  });
+
+  it("write_node enforces the convention: refuses a note with no [[links]]", async () => {
+    const out = await call(make(true), "write_node", {
+      path: "notes/orphan.md",
+      content: "---\nname: orphan\n---\n# Orphan\njust prose, no links",
+    });
+    expect(out).toMatch(/no \[\[links\]\]/);
+    await expect(
+      fsp.access(join(root, "notes", "orphan.md")),
+    ).rejects.toThrow();
+  });
+
+  it("write_node auto-corrects name: to match the filename", async () => {
+    const out = await call(make(true), "write_node", {
+      path: "notes/fixme.md",
+      content: "---\nname: wrongname\n---\n# Fix\nlinks [[beta]]",
+    });
+    expect(out).toMatch(/set name: fixme to match the filename/);
+    const onDisk = await fsp.readFile(join(root, "notes", "fixme.md"), "utf-8");
+    expect(onDisk).toContain("name: fixme");
+    expect(onDisk).not.toContain("wrongname");
+  });
+
+  it("lint_map reports a dangling link in the existing graph", async () => {
+    const out = await call(make(true), "lint_map", {});
+    expect(out).toContain("Dangling links");
+    expect(out).toContain("ghost");
   });
 });
 

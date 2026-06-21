@@ -13,13 +13,23 @@ import { tool, type Tool } from "@lmstudio/sdk";
 import { z } from "zod";
 import { ScopedFs } from "../fs/index";
 import {
+  checkNoteForWrite,
+  lintGraph,
   planIncomingMoves,
   renderDigest,
   renderFolder,
   renderNodeLine,
   searchNodes,
+  type GraphIssueKind,
   type KbGraph,
 } from "../kb/index";
+
+/** Section headers for lint_map output, in report order. */
+const LINT_LABELS: Record<GraphIssueKind, string> = {
+  "name-mismatch": "Name ≠ filename (link target won't resolve)",
+  isolated: "Unlinked notes (floating in the graph)",
+  dangling: "Dangling links (target note doesn't exist yet)",
+};
 
 const msg = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
@@ -170,15 +180,18 @@ export function createMapTools(options: MapToolsOptions): Tool[] {
           `\`${incomingFolder}/<kebab-name>.md\` (the inbox; organize_incoming sorts it later). ` +
           "ALWAYS begin the file with YAML frontmatter and fill every field:\n" +
           "---\n" +
-          "name: <kebab-slug matching the filename>\n" +
+          "name: <slug matching the filename>\n" +
           "description: <one concise sentence summarising the note>\n" +
           "metadata:\n" +
           "  type: <project | area | note | reference>\n" +
           "tags: [<2-5 lowercase topic tags>]\n" +
           "---\n" +
-          "Then a `# Title` and the body. Good name/description/type/tags are what " +
-          "let the note be sorted and found later, so do not leave them blank. The " +
-          "map refreshes automatically on the next turn.",
+          "Then a `# Title`, the body, and a `## Related` section linking at " +
+          "least one other note with [[name]] (the project index or a parent) — " +
+          "a note with no [[link]] floats unlinked in the graph. This is " +
+          "ENFORCED: the write is refused if frontmatter or a [[link]] is " +
+          "missing, and `name:` is auto-set to the filename so the link " +
+          "resolves. The map refreshes automatically on the next turn.",
         parameters: {
           path: z
             .string()
@@ -188,7 +201,8 @@ export function createMapTools(options: MapToolsOptions): Tool[] {
           content: z
             .string()
             .describe(
-              "Full file contents, starting with the YAML frontmatter block.",
+              "Full file contents: YAML frontmatter block, a # Title, the body, " +
+                "and a ## Related list with at least one [[link]].",
             ),
         },
         implementation: async ({ path, content }, { status, warn }) => {
@@ -196,10 +210,23 @@ export function createMapTools(options: MapToolsOptions): Tool[] {
           if (!WRITABLE_EXTENSIONS.has(extname(path).toLowerCase())) {
             return `Error: write_node only writes text notes (${[...WRITABLE_EXTENSIONS].join(", ")}); refusing "${path}".`;
           }
+          // Enforce the graph-validity convention on every write: a note must
+          // have frontmatter and at least one [[link]], and its name: is forced
+          // to match the filename (the link target in both kb-map and Obsidian).
+          const check = checkNoteForWrite(content, path);
+          if (check.errors.length > 0) {
+            return (
+              `Error: "${path}" is not graph-valid, so it was NOT saved:\n` +
+              check.errors.map((e) => `  - ${e}`).join("\n")
+            );
+          }
           try {
-            const wrote = await fs.writeFileIfChanged(path, content);
+            const wrote = await fs.writeFileIfChanged(path, check.content);
+            const fixed = check.nameFixed
+              ? ` (set name: ${check.nameFixed.to} to match the filename)`
+              : "";
             return wrote
-              ? `Wrote ${content.length} characters to ${path}.`
+              ? `Wrote ${check.content.length} characters to ${path}${fixed}.`
               : `No change: ${path} already contains exactly this content. The note is already saved (the map refreshes next turn) — do not write it again.`;
           } catch (err) {
             const m = msg(err);
@@ -288,6 +315,36 @@ export function createMapTools(options: MapToolsOptions): Tool[] {
             lines.push(
               `Left in ${incomingFolder}/ (no type/tag): ${plan.unsorted.map((u) => u.path).join(", ")}`,
             );
+          }
+          return lines.join("\n");
+        },
+      }),
+      tool({
+        name: "lint_map",
+        description:
+          "Check the knowledge base for notes that won't link correctly in a " +
+          "graph view: a `name:` that doesn't match the filename, a note that " +
+          "floats with no [[links]] in or out, and links to notes that don't " +
+          "exist yet. Read-only — it reports what to fix (re-save a flagged note " +
+          "with write_node, which auto-corrects the name and requires a link). " +
+          "Run it after a batch of writes, or to audit an imported/hand-written vault.",
+        parameters: {},
+        implementation: async (_args, { status }) => {
+          status("Linting the map");
+          const graph = await loadGraph();
+          if (graph.size === 0) return "(the knowledge base is empty)";
+          const issues = lintGraph(graph);
+          if (issues.length === 0) {
+            return `All ${graph.size} entries are graph-valid: names match filenames, every note is linked, no dangling links.`;
+          }
+          const lines = [
+            `${issues.length} issue(s) across ${graph.size} entries:`,
+          ];
+          for (const kind of Object.keys(LINT_LABELS) as GraphIssueKind[]) {
+            const group = issues.filter((i) => i.kind === kind);
+            if (group.length === 0) continue;
+            lines.push("", `## ${LINT_LABELS[kind]}`);
+            for (const i of group) lines.push(`- ${i.path}: ${i.detail}`);
           }
           return lines.join("\n");
         },

@@ -1,7 +1,7 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
 > **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
-> merged to `main` (PR #2, merge `7410bfc`). The suite is now **349 tests green, 11
+> merged to `main` (PR #2, merge `7410bfc`). The suite is now **378 tests green, 11
 > plugins + a scheduler daemon**. All **eleven** plugins are live on the LM Studio Hub under
 > [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
 > `kb-map` · `reasoning` · `data-tools` · `time` · `schedule` · `compact` · `toolkit` · `calc-generator`.
@@ -15,6 +15,12 @@
 > exports the conversation to a file and writes a paste-ready seed summary for a fresh
 > chat. A plugin can't clear the host's context (`pullHistory()` is a copy), so "compact"
 > means **export + seed**, not wipe.
+>
+> **KB graph-validity enforcement — DONE** (`core/kb/lint` + `kb-map`): so notes actually
+> link up in a graph view (Obsidian), `write_node` now **enforces** the convention on every
+> write — auto-corrects `name:` to the filename and refuses a note with no frontmatter or no
+> body `[[link]]` — and a read-only **`lint_map`** audits the whole vault (name≠filename,
+> isolated, dangling). Folders create no edges; only links do.
 
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the

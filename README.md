@@ -19,18 +19,18 @@ All eleven plugins are **published to the LM Studio Hub** under [`kosmix`](https
 [`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning) · [`data-tools`](https://lmstudio.ai/kosmix/data-tools) · [`time`](https://lmstudio.ai/kosmix/time) (date/time injection + tools) · [`schedule`](https://lmstudio.ai/kosmix/schedule) (author cron/one-shot tasks) · [`compact`](https://lmstudio.ai/kosmix/compact) (export a conversation + seed the next) · [`toolkit`](https://lmstudio.ai/kosmix/toolkit) (the whole suite in one install) · [`calc-generator`](https://lmstudio.ai/kosmix/calc-generator) (a Generator example).
 The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all phases complete.
 
-| Capability                        | Surface                       | Status                                                                         |
-| --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
-| **Web: search + fetch + HTTP**    | Tools Provider                | ✅ live — `web-tools` plugin + core (search/fetch/http_request/download/crawl) |
-| **Filesystem + code exec**        | Tools Provider                | ✅ live — `local-tools` plugin + core                                          |
-| **RAG / memory (read + write)**   | Preprocessor + Tools Provider | ✅ live — `memory` plugin + core (remember/recall/forget)                      |
-| **Map memory (KB navigation)**    | Preprocessor + Tools Provider | ✅ live — `kb-map` plugin + `core/kb`                                          |
-| **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ live — `data-tools` plugin + `core/data`                                    |
-| **Date/time + timezone**          | Preprocessor + Tools Provider | ✅ live — `time` plugin + `core/time` (now/until/add/diff/convert + injection) |
-| **Scheduling (cron/one-shot)**    | Tools Provider + daemon       | ✅ live — `schedule` plugin (authoring) + `scheduler` daemon (fires due jobs)  |
-| **Context export (`/compact`)**   | Preprocessor                  | ✅ live — `compact` plugin + `core/compact` (export transcript + seed summary) |
-| **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                                            |
-| **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                                         |
+| Capability                        | Surface                       | Status                                                                           |
+| --------------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
+| **Web: search + fetch + HTTP**    | Tools Provider                | ✅ live — `web-tools` plugin + core (search/fetch/http_request/download/crawl)   |
+| **Filesystem + code exec**        | Tools Provider                | ✅ live — `local-tools` plugin + core                                            |
+| **RAG / memory (read + write)**   | Preprocessor + Tools Provider | ✅ live — `memory` plugin + core (remember/recall/forget)                        |
+| **Map memory (KB navigation)**    | Preprocessor + Tools Provider | ✅ live — `kb-map` plugin + `core/kb` (enforced graph-valid writes + `lint_map`) |
+| **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ live — `data-tools` plugin + `core/data`                                      |
+| **Date/time + timezone**          | Preprocessor + Tools Provider | ✅ live — `time` plugin + `core/time` (now/until/add/diff/convert + injection)   |
+| **Scheduling (cron/one-shot)**    | Tools Provider + daemon       | ✅ live — `schedule` plugin (authoring) + `scheduler` daemon (fires due jobs)    |
+| **Context export (`/compact`)**   | Preprocessor                  | ✅ live — `compact` plugin + `core/compact` (export transcript + seed summary)   |
+| **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                                              |
+| **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                                           |
 
 The phased plan that grew this into a full tool suite (surgical file editing, content search, data/SQL/HTTP tools, writable memory, an eval harness) is in **[docs/ROADMAP.md](docs/ROADMAP.md)** — all phases complete.
 
@@ -79,7 +79,7 @@ lmstudio-suite/
 │   │       ├── exec/         runShell / runNode (timeout + caps)   ✅
 │   │       ├── rag/          chunk + cosine VectorStore + index    ✅
 │   │       ├── reasoning/    extractJson + generateStructured + CoT ✅
-│   │       ├── kb/           frontmatter + [[links]] graph + map digest ✅
+│   │       ├── kb/           frontmatter + [[links]] graph + map digest + graph-validity lint ✅
 │   │       ├── data/         calculator + csv + jsonpath + sql-readonly  ✅
 │   │       ├── time/         date/time format + tz math + injection line ✅
 │   │       ├── schedule/     ScheduleStore + cron validation + idempotent upsert ✅
@@ -88,7 +88,7 @@ lmstudio-suite/
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url + http_request/download/crawl)
 │   ├── plugin-local/         ✅ Tools Provider (read/write/edit/search/glob/file-ops + opt-in run_shell)
 │   ├── plugin-memory/        ✅ Preprocessor (RAG) + opt-in write tools (remember/recall/forget)
-│   ├── plugin-kbmap/         ✅ Preprocessor + Tools Provider (map memory over a KB)
+│   ├── plugin-kbmap/         ✅ Preprocessor + Tools Provider (map a KB; enforced write_node + lint_map keep it graph-valid)
 │   ├── plugin-reasoning/     ✅ Prompt Preprocessor (chain-of-thought scaffolding)
 │   ├── plugin-data/          ✅ Tools Provider (calculator + json/csv readers + read-only sqlite)
 │   ├── plugin-time/          ✅ Preprocessor (date/time injection) + Tools Provider (now/until/add/diff/convert)

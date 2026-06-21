@@ -250,6 +250,36 @@ not write it again.` The 2nd–Nth identical write becomes a free no-op the mode
   plugin is just the glue (pull history → map to records → write files → call the model). Match the
   trigger only at the **start** of a message and require trailing whitespace, or `/compacting` fires it.
 
+## Enforcing the KB graph convention at the write path (`core/kb/lint`)
+
+- **A graph view links by links, never by folders.** Obsidian's (and the suite's) graph draws an
+  edge only when one note references another with `[[wikilink]]`; folder structure creates zero
+  edges. So "files appear unlinked" is almost always "the notes don't name each other," not a config
+  problem. The fix is a convention, and a convention only holds if something enforces it.
+- **Two graphs, one overlap.** The suite's KbGraph resolves `[[X]]` by the frontmatter **`name:`**
+  (falling back to filename) and reads links from the **body**; Obsidian resolves by the **filename**
+  (or `aliases:`) and reads body + frontmatter-property links. The intersection that works in both is
+  **a body `[[link]]` with `name:` == filename**. A present-but-different `name:` is the silent killer:
+  kb-map indexes the note under a name that no `[[filename]]` link resolves to. (A _missing_ `name:` is
+  fine — both fall back to the filename.)
+- **Enforce at the write tool, don't just instruct.** `write_node` previously _described_ the
+  convention in its prose and trusted the model — which is why misnamed/orphan notes still landed. Now
+  the tool gates every write through `checkNoteForWrite`: it **auto-corrects** `name:` to the filename
+  (deterministic, unambiguous → just fix it silently) and **refuses** the write when frontmatter or a
+  body `[[link]]` is missing (only the author can supply those → return an actionable error). The
+  invalid note never reaches disk. Description-as-spec is a hope; a write-path gate is a guarantee.
+- **Auto-fix what's deterministic, reject what needs a human/model decision.** Splitting the two is the
+  ACI win: the model isn't nagged about the filename (the tool owns that), only about the one thing it
+  must decide — what to link.
+- **A write-path gate can't see files written any other way.** Hand-edited notes, an imported vault, or
+  a generic file-writer bypass it. So `lint_map` (read-only) audits the whole graph — name≠filename,
+  isolated (no in _and_ no out links — a note only _linked-to_ is still connected), and dangling links.
+  Enforcement = prevention at the tool + detection across the vault.
+- **Strict-on-every-write was a deliberate call.** Requiring a link even on an `incoming/` quick-capture
+  adds friction to the deferred-sort inbox flow — but relaxing it there would re-admit the exact
+  floating-dot bug the feature exists to kill. "Enforce always" means always; the tool teaches the
+  requirement up front so the cost is one `## Related` line.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).

@@ -7442,6 +7442,95 @@ function planIncomingMoves(graph, options = {}) {
   return { moves, conflicts, unsorted };
 }
 
+// packages/core/src/kb/lint.ts
+import { basename as basename4, extname as extname3 } from "node:path";
+function expectedNoteName(relPath) {
+  return basename4(relPath, extname3(relPath));
+}
+function hasFrontmatter(text) {
+  return /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/.test(text);
+}
+function hasBodyLink(body) {
+  return extractLinks(body).length > 0;
+}
+function setFrontmatterName(text, expected) {
+  const lines = text.split(/\r?\n/);
+  if ((lines[0] ?? "").trim() !== "---") return { text, changed: false };
+  let close = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if ((lines[i] ?? "").trim() === "---") {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return { text, changed: false };
+  for (let i = 1; i < close; i++) {
+    const m = (lines[i] ?? "").match(/^name:[ \t]*(.*)$/);
+    if (m) {
+      const current = (m[1] ?? "").trim().replace(/^["']|["']$/g, "");
+      if (current === expected) return { text, changed: false };
+      lines[i] = `name: ${expected}`;
+      return {
+        text: lines.join("\n"),
+        changed: true,
+        fix: { from: current, to: expected }
+      };
+    }
+  }
+  lines.splice(1, 0, `name: ${expected}`);
+  return { text: lines.join("\n"), changed: true, fix: { to: expected } };
+}
+function checkNoteForWrite(content, relPath) {
+  const expected = expectedNoteName(relPath);
+  const errors = [];
+  if (!hasFrontmatter(content)) {
+    errors.push(
+      `missing YAML frontmatter \u2014 begin the file with a \`---\` block holding name: ${expected} / description / metadata.type / tags.`
+    );
+    return { content, errors };
+  }
+  const named = setFrontmatterName(content, expected);
+  const { body } = parseFrontmatter(named.text);
+  if (!hasBodyLink(body)) {
+    errors.push(
+      "no [[links]] in the body \u2014 a note with no link floats unlinked in the graph. Add a `## Related` section linking the project index or a parent note (e.g. `- [[some-note]]`), then save again."
+    );
+  }
+  const check = { content: named.text, errors };
+  if (named.fix) check.nameFixed = named.fix;
+  return check;
+}
+function lintGraph(graph) {
+  const issues = [];
+  for (const node of graph.nodes) {
+    const expected = expectedNoteName(node.path);
+    if (node.name !== expected) {
+      issues.push({
+        path: node.path,
+        kind: "name-mismatch",
+        detail: `name "${node.name}" \u2260 filename "${expected}" \u2014 set name: ${expected} (kb-map links by name, Obsidian by filename).`
+      });
+    }
+    const incoming = graph.incoming(node).length;
+    if (node.links.length === 0 && incoming === 0) {
+      issues.push({
+        path: node.path,
+        kind: "isolated",
+        detail: "no [[links]] out and nothing links in \u2014 floats unlinked."
+      });
+    }
+    const dangling = graph.outgoing(node).dangling;
+    if (dangling.length > 0) {
+      issues.push({
+        path: node.path,
+        kind: "dangling",
+        detail: `links to non-existent note(s): ${dangling.join(", ")}.`
+      });
+    }
+  }
+  return issues;
+}
+
 // packages/core/src/data/calc.ts
 var NUMBER_RE = /^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/;
 function tokenize(expr) {
@@ -8604,9 +8693,14 @@ ${r.stderr}`);
 }
 
 // packages/core/src/tools/map-tools.ts
-import { extname as extname3 } from "node:path";
+import { extname as extname4 } from "node:path";
 import { tool as tool4 } from "@lmstudio/sdk";
 import { z as z4 } from "zod";
+var LINT_LABELS = {
+  "name-mismatch": "Name \u2260 filename (link target won't resolve)",
+  isolated: "Unlinked notes (floating in the graph)",
+  dangling: "Dangling links (target note doesn't exist yet)"
+};
 var msg3 = (err) => err instanceof Error ? err.message : String(err);
 var WRITABLE_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".markdown", ".txt", ".text"]);
 function createMapTools(options) {
@@ -8699,29 +8793,35 @@ function createMapTools(options) {
         name: "write_node",
         description: `Save a note into the knowledge base. For a NEW capture, write it to \`${incomingFolder}/<kebab-name>.md\` (the inbox; organize_incoming sorts it later). ALWAYS begin the file with YAML frontmatter and fill every field:
 ---
-name: <kebab-slug matching the filename>
+name: <slug matching the filename>
 description: <one concise sentence summarising the note>
 metadata:
   type: <project | area | note | reference>
 tags: [<2-5 lowercase topic tags>]
 ---
-Then a \`# Title\` and the body. Good name/description/type/tags are what let the note be sorted and found later, so do not leave them blank. The map refreshes automatically on the next turn.`,
+Then a \`# Title\`, the body, and a \`## Related\` section linking at least one other note with [[name]] (the project index or a parent) \u2014 a note with no [[link]] floats unlinked in the graph. This is ENFORCED: the write is refused if frontmatter or a [[link]] is missing, and \`name:\` is auto-set to the filename so the link resolves. The map refreshes automatically on the next turn.`,
         parameters: {
           path: z4.string().describe(
             `Destination path relative to the KB root, ending in .md (e.g. '${incomingFolder}/my-note.md').`
           ),
           content: z4.string().describe(
-            "Full file contents, starting with the YAML frontmatter block."
+            "Full file contents: YAML frontmatter block, a # Title, the body, and a ## Related list with at least one [[link]]."
           )
         },
         implementation: async ({ path, content }, { status, warn }) => {
           status(`Writing ${path}`);
-          if (!WRITABLE_EXTENSIONS.has(extname3(path).toLowerCase())) {
+          if (!WRITABLE_EXTENSIONS.has(extname4(path).toLowerCase())) {
             return `Error: write_node only writes text notes (${[...WRITABLE_EXTENSIONS].join(", ")}); refusing "${path}".`;
           }
+          const check = checkNoteForWrite(content, path);
+          if (check.errors.length > 0) {
+            return `Error: "${path}" is not graph-valid, so it was NOT saved:
+` + check.errors.map((e) => `  - ${e}`).join("\n");
+          }
           try {
-            const wrote = await fs.writeFileIfChanged(path, content);
-            return wrote ? `Wrote ${content.length} characters to ${path}.` : `No change: ${path} already contains exactly this content. The note is already saved (the map refreshes next turn) \u2014 do not write it again.`;
+            const wrote = await fs.writeFileIfChanged(path, check.content);
+            const fixed = check.nameFixed ? ` (set name: ${check.nameFixed.to} to match the filename)` : "";
+            return wrote ? `Wrote ${check.content.length} characters to ${path}${fixed}.` : `No change: ${path} already contains exactly this content. The note is already saved (the map refreshes next turn) \u2014 do not write it again.`;
           } catch (err) {
             const m = msg3(err);
             warn(`write_node failed: ${m}`);
@@ -8786,6 +8886,30 @@ Then a \`# Title\` and the body. Good name/description/type/tags are what let th
             lines.push(
               `Left in ${incomingFolder}/ (no type/tag): ${plan.unsorted.map((u) => u.path).join(", ")}`
             );
+          }
+          return lines.join("\n");
+        }
+      }),
+      tool4({
+        name: "lint_map",
+        description: "Check the knowledge base for notes that won't link correctly in a graph view: a `name:` that doesn't match the filename, a note that floats with no [[links]] in or out, and links to notes that don't exist yet. Read-only \u2014 it reports what to fix (re-save a flagged note with write_node, which auto-corrects the name and requires a link). Run it after a batch of writes, or to audit an imported/hand-written vault.",
+        parameters: {},
+        implementation: async (_args, { status }) => {
+          status("Linting the map");
+          const graph = await loadGraph();
+          if (graph.size === 0) return "(the knowledge base is empty)";
+          const issues = lintGraph(graph);
+          if (issues.length === 0) {
+            return `All ${graph.size} entries are graph-valid: names match filenames, every note is linked, no dangling links.`;
+          }
+          const lines = [
+            `${issues.length} issue(s) across ${graph.size} entries:`
+          ];
+          for (const kind of Object.keys(LINT_LABELS)) {
+            const group = issues.filter((i) => i.kind === kind);
+            if (group.length === 0) continue;
+            lines.push("", `## ${LINT_LABELS[kind]}`);
+            for (const i of group) lines.push(`- ${i.path}: ${i.detail}`);
           }
           return lines.join("\n");
         }
