@@ -39,6 +39,7 @@ const PLUGINS = [
   "plugin-data",
   "plugin-time",
   "plugin-schedule",
+  "plugin-compact",
   "plugin-toolkit",
   "plugin-generator",
 ];

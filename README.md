@@ -15,8 +15,8 @@ A shared `@lmstudio-suite/core` library holds the actual capability code so both
 
 ## Capabilities
 
-All ten plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
-[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning) · [`data-tools`](https://lmstudio.ai/kosmix/data-tools) · [`time`](https://lmstudio.ai/kosmix/time) (date/time injection + tools) · [`schedule`](https://lmstudio.ai/kosmix/schedule) (author cron/one-shot tasks) · [`toolkit`](https://lmstudio.ai/kosmix/toolkit) (the whole suite in one install) · [`calc-generator`](https://lmstudio.ai/kosmix/calc-generator) (a Generator example).
+All eleven plugins are **published to the LM Studio Hub** under [`kosmix`](https://lmstudio.ai/kosmix) and load in the app — install with the "Run in LM Studio" button on each Hub page:
+[`web-tools`](https://lmstudio.ai/kosmix/web-tools) · [`local-tools`](https://lmstudio.ai/kosmix/local-tools) · [`memory`](https://lmstudio.ai/kosmix/memory) · [`kb-map`](https://lmstudio.ai/kosmix/kb-map) · [`reasoning`](https://lmstudio.ai/kosmix/reasoning) · [`data-tools`](https://lmstudio.ai/kosmix/data-tools) · [`time`](https://lmstudio.ai/kosmix/time) (date/time injection + tools) · [`schedule`](https://lmstudio.ai/kosmix/schedule) (author cron/one-shot tasks) · [`compact`](https://lmstudio.ai/kosmix/compact) (export a conversation + seed the next) · [`toolkit`](https://lmstudio.ai/kosmix/toolkit) (the whole suite in one install) · [`calc-generator`](https://lmstudio.ai/kosmix/calc-generator) (a Generator example).
 The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all phases complete.
 
 | Capability                        | Surface                       | Status                                                                         |
@@ -28,6 +28,7 @@ The roadmap that grew the suite is in [docs/ROADMAP.md](docs/ROADMAP.md) — all
 | **Data + math (csv/json/sqlite)** | Tools Provider                | ✅ live — `data-tools` plugin + `core/data`                                    |
 | **Date/time + timezone**          | Preprocessor + Tools Provider | ✅ live — `time` plugin + `core/time` (now/until/add/diff/convert + injection) |
 | **Scheduling (cron/one-shot)**    | Tools Provider + daemon       | ✅ live — `schedule` plugin (authoring) + `scheduler` daemon (fires due jobs)  |
+| **Context export (`/compact`)**   | Preprocessor                  | ✅ live — `compact` plugin + `core/compact` (export transcript + seed summary) |
 | **Structured output + reasoning** | Preprocessor + core helpers   | ✅ live — `reasoning` plugin + core                                            |
 | **Standalone agent CLI**          | SDK app (`.act()`)            | ✅ built — `agent-cli`                                                         |
 
@@ -48,8 +49,9 @@ The phased plan that grew this into a full tool suite (surgical file editing, co
 | `memory`         | Preprocessor + Tools | **Keep** — toolkit exposes its `remember`/`recall`/`forget` tools but **not** the auto-RAG injection |
 | `kb-map`         | Preprocessor + Tools | **Keep** — toolkit exposes its nav tools but **not** the always-on KB digest injection               |
 | `time`           | Preprocessor + Tools | **Keep** — toolkit exposes its date/time tools but **not** the always-on current-date/time injection |
+| `compact`        | Prompt Preprocessor  | **Keep** — `/compact` export needs `pullHistory()`, which only a preprocessor gets; toolkit has none |
 
-**Recommended setup:** install `toolkit` for tools, plus `reasoning`, `memory`, `kb-map`, and `time` for their preprocessor behavior (and `calc-generator` if you want the Generator example). You can drop the standalone `web-tools` / `local-tools` / `data-tools` / `schedule`.
+**Recommended setup:** install `toolkit` for tools, plus `reasoning`, `memory`, `kb-map`, `time`, and `compact` for their preprocessor behavior (and `calc-generator` if you want the Generator example). You can drop the standalone `web-tools` / `local-tools` / `data-tools` / `schedule`.
 
 > ⚠️ If you run `toolkit` **and** a standalone `memory` / `kb-map` / `schedule`, **disable the matching toolkit group** — otherwise those tools load twice and the model sees duplicate tool names.
 >
@@ -81,6 +83,7 @@ lmstudio-suite/
 │   │       ├── data/         calculator + csv + jsonpath + sql-readonly  ✅
 │   │       ├── time/         date/time format + tz math + injection line ✅
 │   │       ├── schedule/     ScheduleStore + cron validation + idempotent upsert ✅
+│   │       ├── compact/      transcript render + seed-summary prompt + filename stamp ✅
 │   │       └── tools/        shared SDK tool() builders + http + memory + time + schedule + decorators ✅
 │   ├── plugin-web/           ✅ Tools Provider (web_search + fetch_url + http_request/download/crawl)
 │   ├── plugin-local/         ✅ Tools Provider (read/write/edit/search/glob/file-ops + opt-in run_shell)
@@ -90,6 +93,7 @@ lmstudio-suite/
 │   ├── plugin-data/          ✅ Tools Provider (calculator + json/csv readers + read-only sqlite)
 │   ├── plugin-time/          ✅ Preprocessor (date/time injection) + Tools Provider (now/until/add/diff/convert)
 │   ├── plugin-schedule/      ✅ Tools Provider (schedule_task/list/cancel/update/run_now; authoring half)
+│   ├── plugin-compact/       ✅ Prompt Preprocessor (/compact → export transcript + seed summary)
 │   ├── plugin-toolkit/       ✅ Meta-plugin (all groups via per-chat toggles)
 │   ├── plugin-generator/     ✅ Generator example (calculator replaces the LLM)
 │   ├── agent-cli/            ✅ Standalone .act() agent (composes all tools; --approve / --trace)

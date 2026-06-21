@@ -1,0 +1,12 @@
+{
+  "name": "@lmstudio-suite/plugin-compact",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LM Studio plugin: on a /compact trigger, exports the conversation to a file and writes a paste-ready seed summary for a fresh chat.",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@lmstudio-suite/core": "*",
+    "@lmstudio/sdk": "^1.5.0"
+  }
+}

@@ -1,15 +1,20 @@
 # Roadmap — a full tool suite for LM Studio tool models
 
 > **Status: ✅ ALL PHASES COMPLETE + MERGED + PUBLISHED.** Phases 1–5 shipped and
-> merged to `main` (PR #2, merge `7410bfc`). The suite is now **326 tests green, 10
-> plugins + a scheduler daemon**. All **ten** plugins are live on the LM Studio Hub under
+> merged to `main` (PR #2, merge `7410bfc`). The suite is now **349 tests green, 11
+> plugins + a scheduler daemon**. All **eleven** plugins are live on the LM Studio Hub under
 > [`kosmix`](https://lmstudio.ai/kosmix): `web-tools` · `local-tools` · `memory` ·
-> `kb-map` · `reasoning` · `data-tools` · `time` · `schedule` · `toolkit` · `calc-generator`.
+> `kb-map` · `reasoning` · `data-tools` · `time` · `schedule` · `compact` · `toolkit` · `calc-generator`.
 >
 > **Scheduling initiative — COMPLETE (Phases 0–3 shipped)** (a sense of time → schedule
 > authoring → the daemon that fires jobs → results routed into the KB): see
 > [Scheduling initiative](#scheduling-initiative) at the end. **The cron is real, and its
 > outputs are knowledge.**
+>
+> **`compact` plugin — DONE** (a local-model `/compact`): a prompt preprocessor that
+> exports the conversation to a file and writes a paste-ready seed summary for a fresh
+> chat. A plugin can't clear the host's context (`pullHistory()` is a copy), so "compact"
+> means **export + seed**, not wipe.
 
 A working document for Claude Code sessions. Each phase is independently shippable
 and written as a task list with concrete file targets, acceptance criteria, and the

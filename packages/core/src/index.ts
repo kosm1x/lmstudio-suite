@@ -15,4 +15,5 @@ export * from "./kb/index";
 export * from "./data/index";
 export * from "./time/index";
 export * from "./schedule/index";
+export * from "./compact/index";
 export * from "./tools/index";
