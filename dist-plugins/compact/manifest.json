@@ -1,0 +1,14 @@
+{
+  "name": "compact",
+  "owner": "kosmix",
+  "type": "plugin",
+  "runner": "node",
+  "revision": 1,
+  "tags": [
+    "compact",
+    "context",
+    "export",
+    "transcript",
+    "prompt-preprocessor"
+  ]
+}

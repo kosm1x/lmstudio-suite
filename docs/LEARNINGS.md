@@ -225,6 +225,31 @@ not write it again.` The 2nd–Nth identical write becomes a free no-op the mode
   fail). And when you add mutating tools, grep-sweep the `MUTATING_TOOLS` set so `--approve` gating and
   the eval both see them.
 
+## The `compact` plugin (`core/compact` + a preprocessor)
+
+- **A plugin can read the conversation but can't clear it.** The only SDK surface that exposes the
+  chat is `ProcessingController.pullHistory()`, and it's available **only to a prompt preprocessor**
+  (a `ToolsProviderController` is empty — tools can't see history). And `pullHistory()` returns a
+  **copy**: "mutating it will not affect the actual history." There is no truncate/reset API. So a
+  local-model `/compact` can only mean **export + seed**, never wipe — clearing is the host's New
+  Chat button. State that limit loudly rather than pretending to deliver the literal ask. (The local
+  model that proposed `run_shell("/clear")` hallucinated a CLI and confused Claude Code's slash
+  command for a shell verb — read the SDK before believing a generated design.)
+- **A preprocessor can't suppress the turn it sits on.** It returns the (replacement) user message
+  and generation proceeds — there's no way to short-circuit. So `/compact` returns a self-contained
+  status note (file paths + summary) and accepts that the model then emits a brief reply to it. Don't
+  design around suppression you don't have; design the returned message to read well as the last word.
+- **The seed summary is a nested generation via `tokenSource()`.** The preprocessor calls
+  `(await ctl.tokenSource()).respond(prompt)` — the same model the user has selected, pre-wired to
+  their config — then `stripReasoning()` peels any `<think>…</think>` a local model emits. Make it
+  best-effort: the **full transcript is written first**, and a model error only costs the seed, never
+  the export. Same "secondary must not fail primary" rule as the daemon's `--kb` write.
+- **Keep the host-agnostic half in `core` and unit-test it without the SDK.** Trigger parsing,
+  transcript rendering, the summary prompt, reasoning-strip, and the timezone-aware filename stamp are
+  all pure functions over `{role, text}` records — tested against fixed instants, no LM Studio. The
+  plugin is just the glue (pull history → map to records → write files → call the model). Match the
+  trigger only at the **start** of a message and require trailing whitespace, or `/compacting` fires it.
+
 ## Verifying a publish
 
 - Hub page: `https://lmstudio.ai/<owner>/<name>` (JS-rendered — a real browser/headless render distinguishes a live page from a 404).
