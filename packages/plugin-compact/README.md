@@ -34,11 +34,12 @@ Then open **New Chat** and paste the summary to continue with less context.
 - **Timezone** — IANA name (e.g. `America/Mexico_City`) for the filename timestamp. Blank = this machine's timezone.
 - **Enable /compact** — watch for the trigger (on by default).
 - **Write a seed summary** — also summarize via the current model (one extra model call per `/compact`; on by default). Turn off for a raw export with no model call.
+- **Max tokens per summary call** (default `4000`) — the token budget for each summarization call. A long conversation is summarized in chunks of this size, then merged. **Set it below your model's loaded context length.** It can't be auto-detected: LM Studio's SDK reports the model's _maximum_ context, not the window you loaded, so the plugin would over-size and overflow. Default `4000` is safe on essentially any model; raise it toward your context length (e.g. `24000` for a 32k load) for fewer, faster chunks.
 
 ## Notes
 
 - The export is **preprocessor-only** — there is no tool, because only the preprocessor's controller exposes `pullHistory()`.
-- **Long conversations are summarized in chunks (map-reduce).** A conversation that won't fit the model's context is split into context-sized parts, each part summarized, then the part-notes merged into one seed — sized from the model's real `getContextLength()`. This is slower (several model calls) but means compaction works on exactly the big conversations that need it, instead of overflowing the context and producing nothing.
+- **Long conversations are summarized in chunks (map-reduce).** A conversation that won't fit the budget is split into **Max tokens per summary call**-sized parts (measured with the model's tokenizer), each part summarized, then the part-notes merged into one seed. This is slower (several model calls) but means compaction works on exactly the big conversations that need it, instead of overflowing the context and producing nothing.
 - The summary is best-effort: if the model errors or returns nothing, the **full transcript is still written** and you're told why (the failure reason, or that the model returned nothing).
 - After a `/compact`, the model still generates a brief reply to the status note — a preprocessor can't suppress the follow-on turn. It's harmless; the useful artifacts are the two files.
 

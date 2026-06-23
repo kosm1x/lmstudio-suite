@@ -273,6 +273,17 @@ var chatConfigSchematics = createConfigSchematics().field(
     hint: "Also ask the current model to summarize the conversation into a paste-ready seed for a fresh chat. One extra model call per /compact. On by default."
   },
   true
+).field(
+  "maxSummaryTokens",
+  "numeric",
+  {
+    displayName: "Max tokens per summary call",
+    hint: "Budget for each summarization model-call. MUST be below your model's loaded context length \u2014 LM Studio's API reports the model maximum, not the loaded window, so this can't be detected automatically. A long conversation is summarized in chunks of this size, then merged. Lower = more, smaller calls (safe, slower); raise it toward your context length for fewer, faster calls. Default 4000 fits virtually any model.",
+    int: true,
+    min: 1e3,
+    max: 131072
+  },
+  4e3
 ).build();
 
 // packages/plugin-compact/src/index.ts
@@ -328,7 +339,7 @@ async function preprocess(ctl, userMessage) {
     if (chat.get("summarize")) {
       try {
         const source = await ctl.tokenSource();
-        const budgetTokens = await summaryInputBudgetTokens(source);
+        const budgetTokens = chat.get("maxSummaryTokens");
         const summarize = async (instruction) => {
           const result = await source.respond(instruction);
           const raw = result.nonReasoningContent.trim() ? result.nonReasoningContent : result.content;
@@ -381,27 +392,6 @@ ${summary}
 }
 function errText(err) {
   return err instanceof Error ? err.message : String(err);
-}
-async function summaryInputBudgetTokens(source) {
-  let contextTokens = 0;
-  try {
-    if ("getModelInfo" in source) {
-      const info = await source.getModelInfo();
-      if (info && typeof info.contextLength === "number") {
-        contextTokens = info.contextLength;
-      }
-    }
-  } catch {
-  }
-  if (contextTokens <= 0 && "getContextLength" in source) {
-    try {
-      const c = await source.getContextLength();
-      if (c > 0) contextTokens = c;
-    } catch {
-    }
-  }
-  if (contextTokens <= 0) return 4e3;
-  return Math.max(512, Math.floor(contextTokens * 0.7));
 }
 async function main(context) {
   context.withConfigSchematics(chatConfigSchematics).withGlobalConfigSchematics(globalConfigSchematics).withPromptPreprocessor(preprocess);

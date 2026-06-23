@@ -53,4 +53,16 @@ export const chatConfigSchematics = createConfigSchematics()
     },
     true,
   )
+  .field(
+    "maxSummaryTokens",
+    "numeric",
+    {
+      displayName: "Max tokens per summary call",
+      hint: "Budget for each summarization model-call. MUST be below your model's loaded context length — LM Studio's API reports the model maximum, not the loaded window, so this can't be detected automatically. A long conversation is summarized in chunks of this size, then merged. Lower = more, smaller calls (safe, slower); raise it toward your context length for fewer, faster calls. Default 4000 fits virtually any model.",
+      int: true,
+      min: 1000,
+      max: 131072,
+    },
+    4000,
+  )
   .build();
