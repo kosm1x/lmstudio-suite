@@ -69,16 +69,21 @@ function quote(text) {
   return text.replace(/\r\n/g, "\n").split("\n").map((l) => l ? `> ${l}` : ">").join("\n");
 }
 var DEFAULT_SUMMARY_DIRECTIVE = [
-  "Write a hand-off briefing for the AI agent that will continue this work in a",
-  "fresh chat with NONE of the prior context. Address it directly to that agent",
-  "as clear, well-structured prose with short headed sections, so it can pick up",
-  "seamlessly. Cover the who / what / why / how / when: a recap of the project and",
-  "what has happened or been written so far; the key people or characters (names,",
-  "roles, voices, relationships); the setting and timeline; the important decisions",
-  "made and the reasoning behind them; any constraints or threads to honor; and",
-  "exactly where things were left off with the immediate next step. Be concrete \u2014",
-  "real names, facts, and specifics, not generic platitudes. Write the briefing",
-  "directly: no reasoning, no analysis, no <think> blocks, no preamble."
+  "Write a complete, well-narrated hand-off briefing for the AI agent that will",
+  "continue this work in a fresh chat with NONE of the prior context. Address it",
+  "directly to that agent as flowing, readable prose under short headed sections.",
+  "Be thorough and self-contained: include everything needed to resume seamlessly,",
+  "and use as much length as the material genuinely requires \u2014 do not cut detail",
+  "for brevity. But stay information-dense: no padding, repetition, or filler.",
+  "Cover the who / what / why / how / when: a full recap of the project and the",
+  "work or story so far; the characters or people (names, roles, voices,",
+  "relationships, arcs); the setting and timeline; the decisions made and the",
+  "reasoning behind them; open threads, constraints, and the tone or style to",
+  "honor; and exactly where things were left off with the immediate next step.",
+  "Be concrete and specific \u2014 real names, facts, and short quotes where they",
+  "matter. Narrate it as one continuous, coherent account, not terse fragments.",
+  "Write the briefing directly: no reasoning, no analysis, no <think> blocks,",
+  "no preamble."
 ].join("\n");
 function buildSummaryInstruction(transcript, directive) {
   const fenced = transcript.trim().replace(/<<<TRANSCRIPT|TRANSCRIPT>>>/g, "[\u2026]");
@@ -313,12 +318,12 @@ var chatConfigSchematics = createConfigSchematics().field(
   "numeric",
   {
     displayName: "Summary length cap (tokens)",
-    hint: "Caps how much the model generates per summary call \u2014 bounds seed length and speeds it up. NOTE: this counts reasoning tokens too, so if your model 'thinks' heavily and seeds come out cut off, raise it (or tell it not to reason). Default 1024.",
+    hint: "The seed's room to work: the summary aims to be as complete as the material needs, up to this many output tokens. Raise it for longer conversations (a thorough narrated seed of a big chat can want 2000\u20134000), lower it for terser seeds. NOTE: this counts reasoning tokens too, so if your model 'thinks' heavily and seeds come out cut off, raise it. Default 2048.",
     int: true,
     min: 256,
     max: 8192
   },
-  1024
+  2048
 ).build();
 
 // packages/plugin-compact/src/index.ts

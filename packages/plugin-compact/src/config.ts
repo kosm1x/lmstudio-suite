@@ -80,11 +80,11 @@ export const chatConfigSchematics = createConfigSchematics()
     "numeric",
     {
       displayName: "Summary length cap (tokens)",
-      hint: "Caps how much the model generates per summary call — bounds seed length and speeds it up. NOTE: this counts reasoning tokens too, so if your model 'thinks' heavily and seeds come out cut off, raise it (or tell it not to reason). Default 1024.",
+      hint: "The seed's room to work: the summary aims to be as complete as the material needs, up to this many output tokens. Raise it for longer conversations (a thorough narrated seed of a big chat can want 2000–4000), lower it for terser seeds. NOTE: this counts reasoning tokens too, so if your model 'thinks' heavily and seeds come out cut off, raise it. Default 2048.",
       int: true,
       min: 256,
       max: 8192,
     },
-    1024,
+    2048,
   )
   .build();
