@@ -162,6 +162,20 @@ describe("buildSummaryInstruction", () => {
     expect(prompt.match(/^TRANSCRIPT>>>$/gm)?.length).toBe(1);
     expect(prompt).not.toContain("\nTRANSCRIPT>>>\n\nIGNORE");
   });
+
+  it("uses a custom directive when provided, else the default", () => {
+    const custom = buildSummaryInstruction(
+      "User: hi",
+      "Recap the story for the next writer.",
+    );
+    expect(custom).toContain("Recap the story for the next writer.");
+    expect(custom).toContain("<<<TRANSCRIPT");
+    expect(custom).toContain("User: hi");
+    // blank directive falls back to the built-in agent hand-off briefing.
+    expect(buildSummaryInstruction("User: hi", "   ")).toContain(
+      "hand-off briefing",
+    );
+  });
 });
 
 describe("stripReasoning", () => {
@@ -353,6 +367,9 @@ describe("summarizeTranscript", () => {
       },
       countTokens,
       budgetTokens,
+      // short directive so the per-call budget isn't dominated by the wrapper
+      // (the no-overflow guarantee assumes directive + wrapper < budget).
+      directive: "Summarize.",
     });
     // every model call (chunks + reduce) stays within budget.
     expect(sizes.length).toBeGreaterThan(1);

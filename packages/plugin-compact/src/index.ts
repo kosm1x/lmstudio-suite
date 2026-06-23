@@ -151,11 +151,17 @@ export async function preprocess(
         // loaded window, so an auto-budget over-sizes and overflows. The user
         // sets this to fit their loaded context; the default is safe anywhere.
         const budgetTokens = chat.get("maxSummaryTokens");
+        const directive = (chat.get("summaryPrompt") ?? "").trim() || undefined;
+        const maxOut = chat.get("maxSummaryOutputTokens");
         // One model call on an instruction → cleaned text. Prefer the SDK's
         // separated non-reasoning content; strip <think> either way so a
-        // reasoning-only answer never lands raw in the seed.
+        // reasoning-only answer never lands raw in the seed. maxTokens caps the
+        // output — but it lives on LLM opts, not generator handles, so narrow.
         const summarize = async (instruction: string): Promise<string> => {
-          const result = await source.respond(instruction);
+          const result =
+            "countTokens" in source
+              ? await source.respond(instruction, { maxTokens: maxOut })
+              : await source.respond(instruction);
           const raw = result.nonReasoningContent.trim()
             ? result.nonReasoningContent
             : result.content;
@@ -185,6 +191,7 @@ export async function preprocess(
             summarize,
             countTokens,
             budgetTokens,
+            directive,
           })) || null;
         console.log(`[compact] summary length=${summary?.length ?? 0}`);
       } catch (err) {
