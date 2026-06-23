@@ -11,10 +11,17 @@
 > [Scheduling initiative](#scheduling-initiative) at the end. **The cron is real, and its
 > outputs are knowledge.**
 >
-> **`compact` plugin — DONE** (a local-model `/compact`): a prompt preprocessor that
-> exports the conversation to a file and writes a paste-ready seed summary for a fresh
-> chat. A plugin can't clear the host's context (`pullHistory()` is a copy), so "compact"
-> means **export + seed**, not wipe.
+> **`compact` plugin — DONE + HARDENED** (a local-model `/compact`): a prompt preprocessor
+> that exports the conversation to a file and writes a paste-ready **seed** for a fresh chat.
+> A plugin can't clear the host's context (`pullHistory()` is a copy), so "compact" means
+> **export + seed**, not wipe. The seed defaults to a **complete, well-narrated agent
+> hand-off briefing** (recap, characters, decisions + reasons, where you left off) and is
+> fully configurable per-chat: trigger word, export directory, **Summary instructions**
+> (the seed's style/scope), **Max tokens per summary call** (chunking budget), and
+> **Summary length cap**. Long conversations are summarized via token-measured map-reduce.
+> It shipped over revs 1→9 (PRs #11, #13–#20); the bug arc — context-budget overflow,
+> an undefined-global-default throw, and preprocessor-chain trigger mangling — is the
+> canonical case study in [docs/LEARNINGS.md](LEARNINGS.md).
 >
 > **KB graph-validity enforcement — DONE** (`core/kb/lint` + `kb-map`): so notes actually
 > link up in a graph view (Obsidian), `write_node` now **enforces** the convention on every
