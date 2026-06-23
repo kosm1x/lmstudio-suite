@@ -35,6 +35,8 @@ Then open **New Chat** and paste the summary to continue with less context.
 - **Enable /compact** — watch for the trigger (on by default).
 - **Write a seed summary** — also summarize via the current model (one extra model call per `/compact`; on by default). Turn off for a raw export with no model call.
 - **Max tokens per summary call** (default `4000`) — the token budget for each summarization call. A long conversation is summarized in chunks of this size, then merged. **Set it below your model's loaded context length.** It can't be auto-detected: LM Studio's SDK reports the model's _maximum_ context, not the window you loaded, so the plugin would over-size and overflow. Default `4000` is safe on essentially any model; raise it toward your context length (e.g. `24000` for a 32k load) for fewer, faster chunks.
+- **Summary instructions** — _what_ the seed should be. **Blank = a built-in hand-off briefing written for the agent that resumes the work** (who/what/why/how/when: recap, characters, decisions + reasons, and exactly where you left off, as prose — no reasoning). Override to tailor it, e.g. `Recap the story, characters, key choices, and exactly where we left off, as a briefing for the writer who picks this up.` The conversation is appended automatically.
+- **Summary length cap (tokens)** (default `1024`) — caps the model's output per summary call (bounds seed length, speeds it up). **Counts reasoning tokens too** — if your model "thinks" heavily and seeds come out cut off, raise it. The default summary instruction already tells the model not to emit reasoning, which keeps output short on most models.
 
 ## Notes
 

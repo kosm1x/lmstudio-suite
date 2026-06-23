@@ -65,4 +65,26 @@ export const chatConfigSchematics = createConfigSchematics()
     },
     4000,
   )
+  .field(
+    "summaryPrompt",
+    "string",
+    {
+      displayName: "Summary instructions",
+      hint: "What the seed should be. Leave blank for the built-in agent hand-off briefing (recap, characters, decisions + why, where you left off — written as prose for the next agent/writer). Override to tailor it, e.g. 'Recap the story, characters, key choices, and exactly where we left off, as a briefing for the writer who picks this up.' The conversation is appended automatically; ask for prose, no reasoning.",
+      placeholder: "Blank = built-in agent hand-off briefing.",
+    },
+    "",
+  )
+  .field(
+    "maxSummaryOutputTokens",
+    "numeric",
+    {
+      displayName: "Summary length cap (tokens)",
+      hint: "Caps how much the model generates per summary call — bounds seed length and speeds it up. NOTE: this counts reasoning tokens too, so if your model 'thinks' heavily and seeds come out cut off, raise it (or tell it not to reason). Default 1024.",
+      int: true,
+      min: 256,
+      max: 8192,
+    },
+    1024,
+  )
   .build();

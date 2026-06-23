@@ -118,23 +118,44 @@ function quote(text: string): string {
 }
 
 /**
- * Build the instruction sent to the local model to summarize the conversation
- * into a "seed" the user pastes into a fresh chat. Kept terse and directive
- * because small local models drift on long meta-prompts. The transcript is
- * fenced so the model treats it as data, not instructions to follow.
+ * Default seed directive: a hand-off briefing written FOR the agent that will
+ * resume the work in a fresh chat. Prose, concrete, no reasoning. Override it
+ * per-chat via the plugin's "Summary instructions" config field (e.g. a
+ * creative-writing recap). Whatever the directive, the transcript is appended
+ * fenced as data.
  */
-export function buildSummaryInstruction(transcript: string): string {
+export const DEFAULT_SUMMARY_DIRECTIVE = [
+  "Write a hand-off briefing for the AI agent that will continue this work in a",
+  "fresh chat with NONE of the prior context. Address it directly to that agent",
+  "as clear, well-structured prose with short headed sections, so it can pick up",
+  "seamlessly. Cover the who / what / why / how / when: a recap of the project and",
+  "what has happened or been written so far; the key people or characters (names,",
+  "roles, voices, relationships); the setting and timeline; the important decisions",
+  "made and the reasoning behind them; any constraints or threads to honor; and",
+  "exactly where things were left off with the immediate next step. Be concrete —",
+  "real names, facts, and specifics, not generic platitudes. Write the briefing",
+  "directly: no reasoning, no analysis, no <think> blocks, no preamble.",
+].join("\n");
+
+/**
+ * Build the instruction sent to the local model to summarize the conversation
+ * into a "seed" the user pastes into a fresh chat. `directive` is the style/scope
+ * of the seed (defaults to {@link DEFAULT_SUMMARY_DIRECTIVE}); the transcript is
+ * always fenced so the model treats it as data, not instructions to follow.
+ */
+export function buildSummaryInstruction(
+  transcript: string,
+  directive?: string,
+): string {
   // Neutralize the fence markers inside the payload so conversation text can't
   // forge an end-of-transcript and smuggle in top-level instructions.
   const fenced = transcript
     .trim()
     .replace(/<<<TRANSCRIPT|TRANSCRIPT>>>/g, "[…]");
   return [
-    "You are compacting a conversation so it can continue in a fresh chat with",
-    "less context. Read the transcript between the markers and write a concise",
-    "hand-off summary (a few short paragraphs or bullet points) capturing:",
-    "the goal, key decisions and their reasons, the current state, and the",
-    "immediate next step. Write only the summary — no preamble, no markers.",
+    (directive ?? "").trim() || DEFAULT_SUMMARY_DIRECTIVE,
+    "",
+    "Read the conversation between the markers and write the briefing from it.",
     "",
     "<<<TRANSCRIPT",
     fenced,
@@ -209,14 +230,17 @@ export function buildChunkSummaryInstruction(
 }
 
 /** Instruction to merge ordered part-notes into one seed (the reduce step). */
-export function buildReduceInstruction(partialNotes: string): string {
+export function buildReduceInstruction(
+  partialNotes: string,
+  directive?: string,
+): string {
   const fenced = partialNotes.trim().replace(/<<<NOTES|NOTES>>>/g, "[…]");
   return [
-    "Below are ordered notes summarizing consecutive parts of one conversation.",
-    "Merge them into a single concise hand-off summary (a few short paragraphs or",
-    "bullet points) capturing: the goal, key decisions and their reasons, the",
-    "current state, and the immediate next step. Remove redundancy; keep the",
-    "chronological thread. Write only the summary — no preamble, no markers.",
+    (directive ?? "").trim() || DEFAULT_SUMMARY_DIRECTIVE,
+    "",
+    "Below are ordered notes from consecutive parts of the conversation. Merge",
+    "them into the single briefing described above — remove redundancy, keep the",
+    "chronological thread.",
     "",
     "<<<NOTES",
     fenced,
@@ -237,6 +261,8 @@ export interface SummarizeDeps {
    * window. See the plugin's budget helper.
    */
   budgetTokens: number;
+  /** Seed style/scope directive; defaults to {@link DEFAULT_SUMMARY_DIRECTIVE}. */
+  directive?: string;
 }
 
 /**
@@ -253,11 +279,14 @@ export async function summarizeTranscript(
   messages: readonly TranscriptMessage[],
   deps: SummarizeDeps,
 ): Promise<string> {
-  const { summarize, countTokens, budgetTokens } = deps;
+  const { summarize, countTokens, budgetTokens, directive } = deps;
   const plain = plainTranscript(messages);
 
-  if ((await countTokens(buildSummaryInstruction(plain))) <= budgetTokens) {
-    return (await summarize(buildSummaryInstruction(plain))).trim();
+  if (
+    (await countTokens(buildSummaryInstruction(plain, directive))) <=
+    budgetTokens
+  ) {
+    return (await summarize(buildSummaryInstruction(plain, directive))).trim();
   }
 
   // Reserve the chunk instruction's fixed wrapper overhead, then size char-based
@@ -284,14 +313,16 @@ export async function summarizeTranscript(
   // (by the measured ratio, reserving the reduce wrapper) so the final call
   // stays within budget.
   let combined = partials.join("\n\n");
-  const reduceWrapperTokens = await countTokens(buildReduceInstruction(""));
+  const reduceWrapperTokens = await countTokens(
+    buildReduceInstruction("", directive),
+  );
   const reduceBudget = Math.max(1, budgetTokens - reduceWrapperTokens);
   const combinedTokens = await countTokens(combined);
   if (combinedTokens > reduceBudget) {
     const ratio = combined.length / Math.max(1, combinedTokens);
     combined = combined.slice(0, Math.max(1, Math.floor(reduceBudget * ratio)));
   }
-  return (await summarize(buildReduceInstruction(combined))).trim();
+  return (await summarize(buildReduceInstruction(combined, directive))).trim();
 }
 
 /**

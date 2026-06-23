@@ -68,14 +68,24 @@ function serializeTranscript(messages, opts = {}) {
 function quote(text) {
   return text.replace(/\r\n/g, "\n").split("\n").map((l) => l ? `> ${l}` : ">").join("\n");
 }
-function buildSummaryInstruction(transcript) {
+var DEFAULT_SUMMARY_DIRECTIVE = [
+  "Write a hand-off briefing for the AI agent that will continue this work in a",
+  "fresh chat with NONE of the prior context. Address it directly to that agent",
+  "as clear, well-structured prose with short headed sections, so it can pick up",
+  "seamlessly. Cover the who / what / why / how / when: a recap of the project and",
+  "what has happened or been written so far; the key people or characters (names,",
+  "roles, voices, relationships); the setting and timeline; the important decisions",
+  "made and the reasoning behind them; any constraints or threads to honor; and",
+  "exactly where things were left off with the immediate next step. Be concrete \u2014",
+  "real names, facts, and specifics, not generic platitudes. Write the briefing",
+  "directly: no reasoning, no analysis, no <think> blocks, no preamble."
+].join("\n");
+function buildSummaryInstruction(transcript, directive) {
   const fenced = transcript.trim().replace(/<<<TRANSCRIPT|TRANSCRIPT>>>/g, "[\u2026]");
   return [
-    "You are compacting a conversation so it can continue in a fresh chat with",
-    "less context. Read the transcript between the markers and write a concise",
-    "hand-off summary (a few short paragraphs or bullet points) capturing:",
-    "the goal, key decisions and their reasons, the current state, and the",
-    "immediate next step. Write only the summary \u2014 no preamble, no markers.",
+    (directive ?? "").trim() || DEFAULT_SUMMARY_DIRECTIVE,
+    "",
+    "Read the conversation between the markers and write the briefing from it.",
     "",
     "<<<TRANSCRIPT",
     fenced,
@@ -129,14 +139,14 @@ function buildChunkSummaryInstruction(chunk, index, total) {
     "TRANSCRIPT>>>"
   ].join("\n");
 }
-function buildReduceInstruction(partialNotes) {
+function buildReduceInstruction(partialNotes, directive) {
   const fenced = partialNotes.trim().replace(/<<<NOTES|NOTES>>>/g, "[\u2026]");
   return [
-    "Below are ordered notes summarizing consecutive parts of one conversation.",
-    "Merge them into a single concise hand-off summary (a few short paragraphs or",
-    "bullet points) capturing: the goal, key decisions and their reasons, the",
-    "current state, and the immediate next step. Remove redundancy; keep the",
-    "chronological thread. Write only the summary \u2014 no preamble, no markers.",
+    (directive ?? "").trim() || DEFAULT_SUMMARY_DIRECTIVE,
+    "",
+    "Below are ordered notes from consecutive parts of the conversation. Merge",
+    "them into the single briefing described above \u2014 remove redundancy, keep the",
+    "chronological thread.",
     "",
     "<<<NOTES",
     fenced,
@@ -144,10 +154,10 @@ function buildReduceInstruction(partialNotes) {
   ].join("\n");
 }
 async function summarizeTranscript(messages, deps) {
-  const { summarize, countTokens, budgetTokens } = deps;
+  const { summarize, countTokens, budgetTokens, directive } = deps;
   const plain = plainTranscript(messages);
-  if (await countTokens(buildSummaryInstruction(plain)) <= budgetTokens) {
-    return (await summarize(buildSummaryInstruction(plain))).trim();
+  if (await countTokens(buildSummaryInstruction(plain, directive)) <= budgetTokens) {
+    return (await summarize(buildSummaryInstruction(plain, directive))).trim();
   }
   const charsPerToken = plain.length / Math.max(1, await countTokens(plain));
   const chunkWrapperTokens = await countTokens(
@@ -163,14 +173,16 @@ async function summarizeTranscript(messages, deps) {
   }
   if (partials.length <= 1) return partials[0] ?? "";
   let combined = partials.join("\n\n");
-  const reduceWrapperTokens = await countTokens(buildReduceInstruction(""));
+  const reduceWrapperTokens = await countTokens(
+    buildReduceInstruction("", directive)
+  );
   const reduceBudget = Math.max(1, budgetTokens - reduceWrapperTokens);
   const combinedTokens = await countTokens(combined);
   if (combinedTokens > reduceBudget) {
     const ratio = combined.length / Math.max(1, combinedTokens);
     combined = combined.slice(0, Math.max(1, Math.floor(reduceBudget * ratio)));
   }
-  return (await summarize(buildReduceInstruction(combined))).trim();
+  return (await summarize(buildReduceInstruction(combined, directive))).trim();
 }
 function stripReasoning(text) {
   return text.replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/gi, "").replace(/<\/?think\b[^>]*>/gi, "").trim();
@@ -287,6 +299,26 @@ var chatConfigSchematics = createConfigSchematics().field(
     max: 131072
   },
   4e3
+).field(
+  "summaryPrompt",
+  "string",
+  {
+    displayName: "Summary instructions",
+    hint: "What the seed should be. Leave blank for the built-in agent hand-off briefing (recap, characters, decisions + why, where you left off \u2014 written as prose for the next agent/writer). Override to tailor it, e.g. 'Recap the story, characters, key choices, and exactly where we left off, as a briefing for the writer who picks this up.' The conversation is appended automatically; ask for prose, no reasoning.",
+    placeholder: "Blank = built-in agent hand-off briefing."
+  },
+  ""
+).field(
+  "maxSummaryOutputTokens",
+  "numeric",
+  {
+    displayName: "Summary length cap (tokens)",
+    hint: "Caps how much the model generates per summary call \u2014 bounds seed length and speeds it up. NOTE: this counts reasoning tokens too, so if your model 'thinks' heavily and seeds come out cut off, raise it (or tell it not to reason). Default 1024.",
+    int: true,
+    min: 256,
+    max: 8192
+  },
+  1024
 ).build();
 
 // packages/plugin-compact/src/index.ts
@@ -359,8 +391,10 @@ async function preprocess(ctl, userMessage) {
       try {
         const source = await ctl.tokenSource();
         const budgetTokens = chat.get("maxSummaryTokens");
+        const directive = (chat.get("summaryPrompt") ?? "").trim() || void 0;
+        const maxOut = chat.get("maxSummaryOutputTokens");
         const summarize = async (instruction) => {
-          const result = await source.respond(instruction);
+          const result = "countTokens" in source ? await source.respond(instruction, { maxTokens: maxOut }) : await source.respond(instruction);
           const raw = result.nonReasoningContent.trim() ? result.nonReasoningContent : result.content;
           const cleaned = stripReasoning(raw) || raw.replace(/<\/?think\b[^>]*>/gi, "").trim();
           console.log(
@@ -375,7 +409,8 @@ async function preprocess(ctl, userMessage) {
         summary = await summarizeTranscript(messages, {
           summarize,
           countTokens,
-          budgetTokens
+          budgetTokens,
+          directive
         }) || null;
         console.log(`[compact] summary length=${summary?.length ?? 0}`);
       } catch (err) {
