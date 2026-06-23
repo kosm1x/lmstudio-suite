@@ -131,6 +131,123 @@ export function buildSummaryInstruction(transcript: string): string {
   ].join("\n");
 }
 
+/** The conversation as plain `role: text` blocks — the summary payload. */
+export function plainTranscript(
+  messages: readonly TranscriptMessage[],
+): string {
+  return messages.map((m) => `${m.role}: ${m.text}`).join("\n\n");
+}
+
+/**
+ * Pack the conversation into transcript chunks, each at most `maxChars` long,
+ * splitting on turn boundaries so a chunk never cuts mid-message — unless a
+ * single turn is itself larger than `maxChars`, in which case that one turn is
+ * hard-split. Used to keep each summary model-call within the context window.
+ */
+export function chunkTranscript(
+  messages: readonly TranscriptMessage[],
+  maxChars: number,
+): string[] {
+  const budget = Math.max(1, Math.floor(maxChars));
+  const chunks: string[] = [];
+  let current = "";
+  const flush = () => {
+    if (current) chunks.push(current);
+    current = "";
+  };
+  for (const m of messages) {
+    const block = `${m.role}: ${m.text}`;
+    if (block.length > budget) {
+      // A single turn bigger than the budget: emit what we have, then slice it.
+      flush();
+      for (let i = 0; i < block.length; i += budget) {
+        chunks.push(block.slice(i, i + budget));
+      }
+      continue;
+    }
+    const candidate = current ? `${current}\n\n${block}` : block;
+    if (candidate.length > budget) {
+      flush();
+      current = block;
+    } else {
+      current = candidate;
+    }
+  }
+  flush();
+  return chunks;
+}
+
+/** Instruction to summarize one part of a chunked conversation (the map step). */
+export function buildChunkSummaryInstruction(
+  chunk: string,
+  index: number,
+  total: number,
+): string {
+  const fenced = chunk.trim().replace(/<<<TRANSCRIPT|TRANSCRIPT>>>/g, "[…]");
+  return [
+    "You are compacting a long conversation in parts so it can continue in a",
+    `fresh chat. This is part ${index} of ${total}. Summarize THIS part into`,
+    "concise notes: the goal, key decisions and their reasons, the state, and any",
+    "open threads. Keep names, numbers, and specifics. Write only the notes — no",
+    "preamble, no markers.",
+    "",
+    "<<<TRANSCRIPT",
+    fenced,
+    "TRANSCRIPT>>>",
+  ].join("\n");
+}
+
+/** Instruction to merge ordered part-notes into one seed (the reduce step). */
+export function buildReduceInstruction(partialNotes: string): string {
+  const fenced = partialNotes.trim().replace(/<<<NOTES|NOTES>>>/g, "[…]");
+  return [
+    "Below are ordered notes summarizing consecutive parts of one conversation.",
+    "Merge them into a single concise hand-off summary (a few short paragraphs or",
+    "bullet points) capturing: the goal, key decisions and their reasons, the",
+    "current state, and the immediate next step. Remove redundancy; keep the",
+    "chronological thread. Write only the summary — no preamble, no markers.",
+    "",
+    "<<<NOTES",
+    fenced,
+    "NOTES>>>",
+  ].join("\n");
+}
+
+/**
+ * Summarize a conversation into one hand-off seed that fits a small model's
+ * context. When the whole transcript fits within `maxChars` it's a single call.
+ * Otherwise it's map-reduce: summarize each chunk, then merge the part-notes —
+ * so a long conversation (exactly when compaction matters) still summarizes
+ * instead of overflowing the context. `summarize` runs one model call on an
+ * instruction and returns the cleaned (reasoning-stripped) text, or "".
+ */
+export async function summarizeTranscript(
+  messages: readonly TranscriptMessage[],
+  summarize: (instruction: string) => Promise<string>,
+  maxChars: number,
+): Promise<string> {
+  const plain = plainTranscript(messages);
+  if (buildSummaryInstruction(plain).length <= maxChars) {
+    return (await summarize(buildSummaryInstruction(plain))).trim();
+  }
+
+  const chunks = chunkTranscript(messages, maxChars);
+  const partials: string[] = [];
+  for (const [i, chunk] of chunks.entries()) {
+    const note = (
+      await summarize(buildChunkSummaryInstruction(chunk, i + 1, chunks.length))
+    ).trim();
+    if (note) partials.push(note);
+  }
+  if (partials.length <= 1) return partials[0] ?? "";
+
+  // Part-notes are small, but guard the pathological case where even their
+  // concatenation overflows the budget before the merge call.
+  let combined = partials.join("\n\n");
+  if (combined.length > maxChars) combined = combined.slice(0, maxChars);
+  return (await summarize(buildReduceInstruction(combined))).trim();
+}
+
 /**
  * Strip chain-of-thought a local model may emit: balanced `<think>…</think>`
  * blocks (including ones carrying attributes, e.g. `<think type="x">`), plus a

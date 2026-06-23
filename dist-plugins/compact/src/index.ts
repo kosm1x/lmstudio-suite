@@ -79,6 +79,83 @@ function buildSummaryInstruction(transcript) {
     "TRANSCRIPT>>>"
   ].join("\n");
 }
+function plainTranscript(messages) {
+  return messages.map((m) => `${m.role}: ${m.text}`).join("\n\n");
+}
+function chunkTranscript(messages, maxChars) {
+  const budget = Math.max(1, Math.floor(maxChars));
+  const chunks = [];
+  let current = "";
+  const flush = () => {
+    if (current) chunks.push(current);
+    current = "";
+  };
+  for (const m of messages) {
+    const block = `${m.role}: ${m.text}`;
+    if (block.length > budget) {
+      flush();
+      for (let i = 0; i < block.length; i += budget) {
+        chunks.push(block.slice(i, i + budget));
+      }
+      continue;
+    }
+    const candidate = current ? `${current}
+
+${block}` : block;
+    if (candidate.length > budget) {
+      flush();
+      current = block;
+    } else {
+      current = candidate;
+    }
+  }
+  flush();
+  return chunks;
+}
+function buildChunkSummaryInstruction(chunk, index, total) {
+  const fenced = chunk.trim().replace(/<<<TRANSCRIPT|TRANSCRIPT>>>/g, "[\u2026]");
+  return [
+    "You are compacting a long conversation in parts so it can continue in a",
+    `fresh chat. This is part ${index} of ${total}. Summarize THIS part into`,
+    "concise notes: the goal, key decisions and their reasons, the state, and any",
+    "open threads. Keep names, numbers, and specifics. Write only the notes \u2014 no",
+    "preamble, no markers.",
+    "",
+    "<<<TRANSCRIPT",
+    fenced,
+    "TRANSCRIPT>>>"
+  ].join("\n");
+}
+function buildReduceInstruction(partialNotes) {
+  const fenced = partialNotes.trim().replace(/<<<NOTES|NOTES>>>/g, "[\u2026]");
+  return [
+    "Below are ordered notes summarizing consecutive parts of one conversation.",
+    "Merge them into a single concise hand-off summary (a few short paragraphs or",
+    "bullet points) capturing: the goal, key decisions and their reasons, the",
+    "current state, and the immediate next step. Remove redundancy; keep the",
+    "chronological thread. Write only the summary \u2014 no preamble, no markers.",
+    "",
+    "<<<NOTES",
+    fenced,
+    "NOTES>>>"
+  ].join("\n");
+}
+async function summarizeTranscript(messages, summarize, maxChars) {
+  const plain = plainTranscript(messages);
+  if (buildSummaryInstruction(plain).length <= maxChars) {
+    return (await summarize(buildSummaryInstruction(plain))).trim();
+  }
+  const chunks = chunkTranscript(messages, maxChars);
+  const partials = [];
+  for (const [i, chunk] of chunks.entries()) {
+    const note = (await summarize(buildChunkSummaryInstruction(chunk, i + 1, chunks.length))).trim();
+    if (note) partials.push(note);
+  }
+  if (partials.length <= 1) return partials[0] ?? "";
+  let combined = partials.join("\n\n");
+  if (combined.length > maxChars) combined = combined.slice(0, maxChars);
+  return (await summarize(buildReduceInstruction(combined))).trim();
+}
 function stripReasoning(text) {
   return text.replace(/<think\b[^>]*>[\s\S]*?<\/think\s*>/gi, "").replace(/<\/?think\b[^>]*>/gi, "").trim();
 }
@@ -234,14 +311,19 @@ async function preprocess(ctl, userMessage) {
       `- Transcript: ${dumpPath}`
     ];
     let summary = null;
+    let summaryError = null;
     if (chat.get("summarize")) {
-      const plain = messages.map((m) => `${m.role}: ${m.text}`).join("\n\n");
       try {
         const source = await ctl.tokenSource();
-        const result = await source.respond(buildSummaryInstruction(plain));
-        const raw = result.nonReasoningContent.trim() ? result.nonReasoningContent : result.content;
-        summary = stripReasoning(raw) || null;
+        const maxChars = await summaryInputBudgetChars(source);
+        const runOnce = async (instruction) => {
+          const result = await source.respond(instruction);
+          const raw = result.nonReasoningContent.trim() ? result.nonReasoningContent : result.content;
+          return stripReasoning(raw);
+        };
+        summary = await summarizeTranscript(messages, runOnce, maxChars) || null;
       } catch (err) {
+        summaryError = errText(err);
         ctl.debug(`[compact] summary failed: ${errText(err)}`);
       }
       if (summary) {
@@ -256,6 +338,11 @@ ${summary}
           "Summary for the next chat:",
           "",
           summary
+        );
+      } else if (summaryError) {
+        lines.push(
+          "",
+          `_(Seed summary failed: ${summaryError} \u2014 the full transcript above is still saved.)_`
         );
       } else {
         lines.push(
@@ -276,6 +363,20 @@ ${summary}
 }
 function errText(err) {
   return err instanceof Error ? err.message : String(err);
+}
+async function summaryInputBudgetChars(source) {
+  const FALLBACK_CHARS = 12e3;
+  try {
+    if ("getContextLength" in source) {
+      const contextTokens = await source.getContextLength();
+      if (contextTokens > 0) {
+        const inputTokens = Math.max(1024, Math.floor(contextTokens * 0.7));
+        return inputTokens * 3;
+      }
+    }
+  } catch {
+  }
+  return FALLBACK_CHARS;
 }
 async function main(context) {
   context.withConfigSchematics(chatConfigSchematics).withGlobalConfigSchematics(globalConfigSchematics).withPromptPreprocessor(preprocess);

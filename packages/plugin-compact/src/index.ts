@@ -24,13 +24,13 @@ import type {
   PromptPreprocessorController,
 } from "@lmstudio/sdk";
 import {
-  buildSummaryInstruction,
   compactFilenames,
   compactStamp,
   hostTimezone,
   parseCompactTrigger,
   serializeTranscript,
   stripReasoning,
+  summarizeTranscript,
   type TranscriptMessage,
 } from "@lmstudio-suite/core";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -106,18 +106,27 @@ export async function preprocess(
     ];
 
     let summary: string | null = null;
+    let summaryError: string | null = null;
     if (chat.get("summarize")) {
-      const plain = messages.map((m) => `${m.role}: ${m.text}`).join("\n\n");
       try {
         const source = await ctl.tokenSource();
-        const result = await source.respond(buildSummaryInstruction(plain));
-        // Prefer the SDK's separated non-reasoning text; strip <think> either
-        // way so a reasoning-only answer never lands raw in the seed file.
-        const raw = result.nonReasoningContent.trim()
-          ? result.nonReasoningContent
-          : result.content;
-        summary = stripReasoning(raw) || null;
+        const maxChars = await summaryInputBudgetChars(source);
+        // One model call on an instruction → cleaned text. Prefer the SDK's
+        // separated non-reasoning content; strip <think> either way so a
+        // reasoning-only answer never lands raw in the seed.
+        const runOnce = async (instruction: string): Promise<string> => {
+          const result = await source.respond(instruction);
+          const raw = result.nonReasoningContent.trim()
+            ? result.nonReasoningContent
+            : result.content;
+          return stripReasoning(raw);
+        };
+        // Map-reduce when the transcript would overflow the context, so a long
+        // conversation (exactly when compaction matters) still summarizes.
+        summary =
+          (await summarizeTranscript(messages, runOnce, maxChars)) || null;
       } catch (err) {
+        summaryError = errText(err);
         ctl.debug(`[compact] summary failed: ${errText(err)}`);
       }
       if (summary) {
@@ -129,6 +138,11 @@ export async function preprocess(
           "Summary for the next chat:",
           "",
           summary,
+        );
+      } else if (summaryError) {
+        lines.push(
+          "",
+          `_(Seed summary failed: ${summaryError} — the full transcript above is still saved.)_`,
         );
       } else {
         lines.push(
@@ -152,6 +166,35 @@ export async function preprocess(
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A conservative character budget for one summary model-call, derived from the
+ * model's real context window so a long transcript gets chunked instead of
+ * overflowing it (the failure mode when the whole conversation is sent at once).
+ * Reserve ~30% of context for the instruction + the model's own output, and
+ * size the input at ~3 chars/token (a typical ratio). On token-dense content
+ * (code, CJK) a packed chunk can use more of the window, but seed summaries are
+ * short, so the 30% reservation absorbs the slack without overflowing.
+ * Falls back to a safe constant when the token source is a generator handle that
+ * doesn't expose its context length.
+ */
+async function summaryInputBudgetChars(
+  source: Awaited<ReturnType<PromptPreprocessorController["tokenSource"]>>,
+): Promise<number> {
+  const FALLBACK_CHARS = 12_000; // ~3–4k tokens: safe even for 8k-context models
+  try {
+    if ("getContextLength" in source) {
+      const contextTokens = await source.getContextLength();
+      if (contextTokens > 0) {
+        const inputTokens = Math.max(1024, Math.floor(contextTokens * 0.7));
+        return inputTokens * 3;
+      }
+    }
+  } catch {
+    /* fall through to the constant */
+  }
+  return FALLBACK_CHARS;
 }
 
 export async function main(context: PluginContext) {
