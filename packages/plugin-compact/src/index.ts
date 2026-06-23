@@ -110,7 +110,11 @@ export async function preprocess(
     if (chat.get("summarize")) {
       try {
         const source = await ctl.tokenSource();
-        const budgetTokens = await summaryInputBudgetTokens(source);
+        // The per-call token budget is configured, not probed: LM Studio's
+        // getModelInfo()/getContextLength() report the model MAXIMUM, not the
+        // loaded window, so an auto-budget over-sizes and overflows. The user
+        // sets this to fit their loaded context; the default is safe anywhere.
+        const budgetTokens = chat.get("maxSummaryTokens");
         // One model call on an instruction → cleaned text. Prefer the SDK's
         // separated non-reasoning content; strip <think> either way so a
         // reasoning-only answer never lands raw in the seed.
@@ -175,43 +179,6 @@ export async function preprocess(
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/**
- * Max input tokens for one summary call, with output headroom reserved.
- *
- * MUST be derived from the model's **loaded** context window. `getModelInfo()`
- * on a loaded handle reports the instance's `contextLength` (the loaded window);
- * `getContextLength()` can instead report the model's *maximum* (e.g. ~100k for
- * Llama 4), which — if used as the budget — lets a single summary call overflow
- * the much smaller loaded window. So prefer `getModelInfo()`, fall back to
- * `getContextLength()`, then a safe constant. Reserve ~30% for the instruction
- * overhead + the model's own summary output.
- */
-async function summaryInputBudgetTokens(
-  source: Awaited<ReturnType<PromptPreprocessorController["tokenSource"]>>,
-): Promise<number> {
-  let contextTokens = 0;
-  try {
-    if ("getModelInfo" in source) {
-      const info = await source.getModelInfo();
-      if (info && typeof info.contextLength === "number") {
-        contextTokens = info.contextLength;
-      }
-    }
-  } catch {
-    /* fall through */
-  }
-  if (contextTokens <= 0 && "getContextLength" in source) {
-    try {
-      const c = await source.getContextLength();
-      if (c > 0) contextTokens = c;
-    } catch {
-      /* fall through */
-    }
-  }
-  if (contextTokens <= 0) return 4000; // safe default when nothing is reported
-  return Math.max(512, Math.floor(contextTokens * 0.7));
 }
 
 export async function main(context: PluginContext) {
