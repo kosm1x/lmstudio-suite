@@ -102,8 +102,10 @@ export async function preprocess(
   // "/compact" and no file is written. Defaulting keeps it working with no config.
   const trigger = (global.get("trigger") ?? "").trim() || "/compact";
   const { matched, note } = parseCompactTrigger(text, trigger);
+  // Log what compact actually received — earlier preprocessors in the chain can
+  // prepend content, so a typed "/compact" may not arrive at the start verbatim.
   console.log(
-    `[compact] trigger=${JSON.stringify(trigger)} matched=${matched}`,
+    `[compact] trigger=${JSON.stringify(trigger)} matched=${matched} received=${JSON.stringify(text.slice(0, 160))}`,
   );
   if (!matched) return userMessage;
 

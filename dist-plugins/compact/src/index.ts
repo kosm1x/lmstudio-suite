@@ -29,12 +29,15 @@ var CRON_FIELDS_6 = [
 
 // packages/core/src/compact/compact.ts
 function parseCompactTrigger(text, trigger) {
-  const body = text.trim();
   const trig = (trigger ?? "").trim();
+  const body = (text ?? "").trim();
   if (!trig || !body) return { matched: false, note: "" };
-  if (body === trig) return { matched: true, note: "" };
-  if (body.startsWith(trig) && /\s/.test(body.charAt(trig.length))) {
-    return { matched: true, note: body.slice(trig.length).trim() };
+  for (const candidate of [body, ...body.split(/\r?\n/)]) {
+    const line = candidate.trim();
+    if (line === trig) return { matched: true, note: "" };
+    if (line.startsWith(trig) && /\s/.test(line.charAt(trig.length))) {
+      return { matched: true, note: line.slice(trig.length).trim() };
+    }
   }
   return { matched: false, note: "" };
 }
@@ -322,7 +325,7 @@ async function preprocess(ctl, userMessage) {
   const trigger = (global.get("trigger") ?? "").trim() || "/compact";
   const { matched, note } = parseCompactTrigger(text, trigger);
   console.log(
-    `[compact] trigger=${JSON.stringify(trigger)} matched=${matched}`
+    `[compact] trigger=${JSON.stringify(trigger)} matched=${matched} received=${JSON.stringify(text.slice(0, 160))}`
   );
   if (!matched) return userMessage;
   try {

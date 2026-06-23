@@ -3,6 +3,6 @@
   "owner": "kosmix",
   "type": "plugin",
   "runner": "node",
-  "revision": 5,
+  "revision": 6,
   "tags": ["compact", "context", "export", "transcript", "prompt-preprocessor"]
 }
