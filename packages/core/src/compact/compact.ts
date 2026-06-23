@@ -40,7 +40,10 @@ export function parseCompactTrigger(
   trigger: string,
 ): TriggerMatch {
   const body = text.trim();
-  const trig = trigger.trim();
+  // Null-safe: the trigger may arrive undefined when LM Studio hasn't
+  // materialized the global-config default. Never throw here — this runs
+  // outside the plugin's try/catch, so a throw would fail the preprocessor open.
+  const trig = (trigger ?? "").trim();
   if (!trig || !body) return { matched: false, note: "" };
   if (body === trig) return { matched: true, note: "" };
   // trigger must be followed by whitespace to count (avoids "/compacting").

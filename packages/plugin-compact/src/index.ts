@@ -34,22 +34,45 @@ import {
   type TranscriptMessage,
 } from "@lmstudio-suite/core";
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chatConfigSchematics, globalConfigSchematics } from "./config";
 
-/** Configured zone, or this machine's zone when left blank. */
-function resolveTimezone(raw: string): string {
-  return raw.trim() || hostTimezone();
+/** Configured zone, or this machine's zone when left blank/unset. */
+function resolveTimezone(raw: string | undefined): string {
+  return (raw ?? "").trim() || hostTimezone();
 }
 
-/** Expand a leading ~ and resolve; "" stays "" (matches sibling plugins). */
-function expandHome(p: string): string {
-  const t = p.trim();
+/** Expand a leading ~ and resolve; blank/unset stays "" (matches siblings). */
+function expandHome(p: string | undefined): string {
+  const t = (p ?? "").trim();
   if (!t) return "";
   const expanded =
     t === "~" || t.startsWith("~/") ? join(homedir(), t.slice(1)) : t;
   return resolve(expanded);
+}
+
+/**
+ * The directory to export into, in priority order:
+ *   1. the configured "Export directory" (expanded);
+ *   2. LM Studio's per-prediction working directory, if attached;
+ *   3. a temp folder — so the transcript ALWAYS lands somewhere writable.
+ * Step 2 throws when no folder is attached, so it must be guarded — otherwise a
+ * blank Export directory makes the whole export fail and nothing is written.
+ */
+async function resolveExportDir(
+  configured: string | undefined,
+  ctl: PromptPreprocessorController,
+): Promise<string> {
+  const dir = expandHome(configured);
+  if (dir) return dir;
+  try {
+    const wd = ctl.getWorkingDirectory();
+    if (wd) return wd;
+  } catch {
+    /* not attached to a working directory */
+  }
+  return join(tmpdir(), "lmstudio-compacts");
 }
 
 /** A readable wall-clock stamp for the export header, in the given zone. */
@@ -72,7 +95,16 @@ export async function preprocess(
   if (!chat.get("enabled")) return userMessage;
 
   const global = ctl.getGlobalPluginConfig(globalConfigSchematics);
-  const { matched, note } = parseCompactTrigger(text, global.get("trigger"));
+  // Default the trigger when the global field is unset/blank. LM Studio does not
+  // reliably materialize a global-config default, so global.get("trigger") can be
+  // undefined; an unguarded .trim() on it would throw HERE (outside the try
+  // below) and fail the whole preprocessor open — the model then receives the raw
+  // "/compact" and no file is written. Defaulting keeps it working with no config.
+  const trigger = (global.get("trigger") ?? "").trim() || "/compact";
+  const { matched, note } = parseCompactTrigger(text, trigger);
+  console.log(
+    `[compact] trigger=${JSON.stringify(trigger)} matched=${matched}`,
+  );
   if (!matched) return userMessage;
 
   try {
@@ -88,7 +120,8 @@ export async function preprocess(
     const now = new Date();
     const tz = resolveTimezone(global.get("timezone"));
     const { dump, seed } = compactFilenames(compactStamp(now, tz));
-    const dir = expandHome(global.get("dumpDir")) || ctl.getWorkingDirectory();
+    const dir = await resolveExportDir(global.get("dumpDir"), ctl);
+    console.log(`[compact] export dir=${JSON.stringify(dir)}`);
     await mkdir(dir, { recursive: true });
 
     const transcriptMd = serializeTranscript(messages, {
@@ -98,6 +131,7 @@ export async function preprocess(
     });
     const dumpPath = join(dir, dump);
     await writeFile(dumpPath, transcriptMd, "utf8");
+    console.log(`[compact] wrote ${dumpPath}`);
 
     const lines = [
       "[compact] Exported this conversation.",
@@ -173,6 +207,7 @@ export async function preprocess(
     );
     return lines.join("\n");
   } catch (err) {
+    console.log(`[compact] export failed: ${errText(err)}`);
     return `[compact] Export failed: ${errText(err)}`;
   }
 }
