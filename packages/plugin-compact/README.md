@@ -38,7 +38,8 @@ Then open **New Chat** and paste the summary to continue with less context.
 ## Notes
 
 - The export is **preprocessor-only** — there is no tool, because only the preprocessor's controller exposes `pullHistory()`.
-- The summary is best-effort: if the model errors or returns nothing, the **full transcript is still written** and you're told the seed was skipped.
+- **Long conversations are summarized in chunks (map-reduce).** A conversation that won't fit the model's context is split into context-sized parts, each part summarized, then the part-notes merged into one seed — sized from the model's real `getContextLength()`. This is slower (several model calls) but means compaction works on exactly the big conversations that need it, instead of overflowing the context and producing nothing.
+- The summary is best-effort: if the model errors or returns nothing, the **full transcript is still written** and you're told why (the failure reason, or that the model returned nothing).
 - After a `/compact`, the model still generates a brief reply to the status note — a preprocessor can't suppress the follow-on turn. It's harmless; the useful artifacts are the two files.
 
 MIT licensed.
