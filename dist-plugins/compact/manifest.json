@@ -3,7 +3,7 @@
   "owner": "kosmix",
   "type": "plugin",
   "runner": "node",
-  "revision": 4,
+  "revision": 5,
   "tags": [
     "compact",
     "context",

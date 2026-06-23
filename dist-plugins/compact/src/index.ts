@@ -30,7 +30,7 @@ var CRON_FIELDS_6 = [
 // packages/core/src/compact/compact.ts
 function parseCompactTrigger(text, trigger) {
   const body = text.trim();
-  const trig = trigger.trim();
+  const trig = (trigger ?? "").trim();
   if (!trig || !body) return { matched: false, note: "" };
   if (body === trig) return { matched: true, note: "" };
   if (body.startsWith(trig) && /\s/.test(body.charAt(trig.length))) {
@@ -224,7 +224,7 @@ import { z as z8 } from "zod";
 
 // packages/plugin-compact/src/index.ts
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // packages/plugin-compact/src/config.ts
@@ -288,13 +288,23 @@ var chatConfigSchematics = createConfigSchematics().field(
 
 // packages/plugin-compact/src/index.ts
 function resolveTimezone(raw) {
-  return raw.trim() || hostTimezone();
+  return (raw ?? "").trim() || hostTimezone();
 }
 function expandHome(p) {
-  const t = p.trim();
+  const t = (p ?? "").trim();
   if (!t) return "";
   const expanded = t === "~" || t.startsWith("~/") ? join(homedir(), t.slice(1)) : t;
   return resolve(expanded);
+}
+async function resolveExportDir(configured, ctl) {
+  const dir = expandHome(configured);
+  if (dir) return dir;
+  try {
+    const wd = ctl.getWorkingDirectory();
+    if (wd) return wd;
+  } catch {
+  }
+  return join(tmpdir(), "lmstudio-compacts");
 }
 function humanStamp(now, tz) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -309,7 +319,11 @@ async function preprocess(ctl, userMessage) {
   const chat = ctl.getPluginConfig(chatConfigSchematics);
   if (!chat.get("enabled")) return userMessage;
   const global = ctl.getGlobalPluginConfig(globalConfigSchematics);
-  const { matched, note } = parseCompactTrigger(text, global.get("trigger"));
+  const trigger = (global.get("trigger") ?? "").trim() || "/compact";
+  const { matched, note } = parseCompactTrigger(text, trigger);
+  console.log(
+    `[compact] trigger=${JSON.stringify(trigger)} matched=${matched}`
+  );
   if (!matched) return userMessage;
   try {
     const history = await ctl.pullHistory();
@@ -320,7 +334,8 @@ async function preprocess(ctl, userMessage) {
     const now = /* @__PURE__ */ new Date();
     const tz = resolveTimezone(global.get("timezone"));
     const { dump, seed } = compactFilenames(compactStamp(now, tz));
-    const dir = expandHome(global.get("dumpDir")) || ctl.getWorkingDirectory();
+    const dir = await resolveExportDir(global.get("dumpDir"), ctl);
+    console.log(`[compact] export dir=${JSON.stringify(dir)}`);
     await mkdir(dir, { recursive: true });
     const transcriptMd = serializeTranscript(messages, {
       systemPrompt: history.getSystemPrompt(),
@@ -329,6 +344,7 @@ async function preprocess(ctl, userMessage) {
     });
     const dumpPath = join(dir, dump);
     await writeFile(dumpPath, transcriptMd, "utf8");
+    console.log(`[compact] wrote ${dumpPath}`);
     const lines = [
       "[compact] Exported this conversation.",
       "",
@@ -387,6 +403,7 @@ ${summary}
     );
     return lines.join("\n");
   } catch (err) {
+    console.log(`[compact] export failed: ${errText(err)}`);
     return `[compact] Export failed: ${errText(err)}`;
   }
 }

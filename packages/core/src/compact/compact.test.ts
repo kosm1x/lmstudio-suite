@@ -50,6 +50,17 @@ describe("parseCompactTrigger", () => {
     expect(parseCompactTrigger("   ", "/compact").matched).toBe(false);
   });
 
+  it("is null-safe — an undefined trigger returns no-match instead of throwing", () => {
+    // LM Studio can hand back undefined for an unmaterialized global default;
+    // this must not throw (it runs outside the plugin's try/catch).
+    expect(() =>
+      parseCompactTrigger("/compact", undefined as unknown as string),
+    ).not.toThrow();
+    expect(
+      parseCompactTrigger("/compact", undefined as unknown as string).matched,
+    ).toBe(false);
+  });
+
   it("honours a custom trigger word", () => {
     expect(parseCompactTrigger("!dump", "!dump").matched).toBe(true);
   });
