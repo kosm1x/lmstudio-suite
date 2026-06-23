@@ -213,25 +213,53 @@ export function buildReduceInstruction(partialNotes: string): string {
   ].join("\n");
 }
 
+/** Dependencies for {@link summarizeTranscript} — the model calls it needs. */
+export interface SummarizeDeps {
+  /** Run one model call on an instruction; returns cleaned text (or ""). */
+  summarize: (instruction: string) => Promise<string>;
+  /** Count tokens in a string with the model's own tokenizer. */
+  countTokens: (text: string) => Promise<number>;
+  /**
+   * Max input tokens for a single summary call. Must be derived from the
+   * model's **loaded** context window (with output headroom already reserved),
+   * NOT the model's maximum — otherwise a single call can overflow the loaded
+   * window. See the plugin's budget helper.
+   */
+  budgetTokens: number;
+}
+
 /**
- * Summarize a conversation into one hand-off seed that fits a small model's
- * context. When the whole transcript fits within `maxChars` it's a single call.
- * Otherwise it's map-reduce: summarize each chunk, then merge the part-notes —
- * so a long conversation (exactly when compaction matters) still summarizes
- * instead of overflowing the context. `summarize` runs one model call on an
- * instruction and returns the cleaned (reasoning-stripped) text, or "".
+ * Summarize a conversation into one hand-off seed that fits the model's loaded
+ * context. The fit check and chunk sizing are measured with the model's real
+ * tokenizer (`countTokens`) against `budgetTokens`, so neither a context probe
+ * that reports the model maximum nor token-dense text can make a single call
+ * exceed the window. When the whole transcript fits it's one call; otherwise
+ * it's map-reduce: summarize each chunk, then merge the part-notes — so a long
+ * conversation (exactly when compaction matters) still summarizes instead of
+ * overflowing. `summarize` returns the cleaned (reasoning-stripped) text, or "".
  */
 export async function summarizeTranscript(
   messages: readonly TranscriptMessage[],
-  summarize: (instruction: string) => Promise<string>,
-  maxChars: number,
+  deps: SummarizeDeps,
 ): Promise<string> {
+  const { summarize, countTokens, budgetTokens } = deps;
   const plain = plainTranscript(messages);
-  if (buildSummaryInstruction(plain).length <= maxChars) {
+
+  if ((await countTokens(buildSummaryInstruction(plain))) <= budgetTokens) {
     return (await summarize(buildSummaryInstruction(plain))).trim();
   }
 
+  // Reserve the chunk instruction's fixed wrapper overhead, then size char-based
+  // chunks to THIS content's real token ratio — so each chunk call (wrapper +
+  // chunk) lands within budgetTokens however densely the text tokenizes.
+  const charsPerToken = plain.length / Math.max(1, await countTokens(plain));
+  const chunkWrapperTokens = await countTokens(
+    buildChunkSummaryInstruction("", 1, 9),
+  );
+  const chunkBudget = Math.max(1, budgetTokens - chunkWrapperTokens);
+  const maxChars = Math.max(1, Math.floor(chunkBudget * charsPerToken));
   const chunks = chunkTranscript(messages, maxChars);
+
   const partials: string[] = [];
   for (const [i, chunk] of chunks.entries()) {
     const note = (
@@ -241,10 +269,17 @@ export async function summarizeTranscript(
   }
   if (partials.length <= 1) return partials[0] ?? "";
 
-  // Part-notes are small, but guard the pathological case where even their
-  // concatenation overflows the budget before the merge call.
+  // Part-notes are small; only if their merge would still overflow do we trim
+  // (by the measured ratio, reserving the reduce wrapper) so the final call
+  // stays within budget.
   let combined = partials.join("\n\n");
-  if (combined.length > maxChars) combined = combined.slice(0, maxChars);
+  const reduceWrapperTokens = await countTokens(buildReduceInstruction(""));
+  const reduceBudget = Math.max(1, budgetTokens - reduceWrapperTokens);
+  const combinedTokens = await countTokens(combined);
+  if (combinedTokens > reduceBudget) {
+    const ratio = combined.length / Math.max(1, combinedTokens);
+    combined = combined.slice(0, Math.max(1, Math.floor(reduceBudget * ratio)));
+  }
   return (await summarize(buildReduceInstruction(combined))).trim();
 }
 

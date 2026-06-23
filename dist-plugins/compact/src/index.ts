@@ -140,11 +140,18 @@ function buildReduceInstruction(partialNotes) {
     "NOTES>>>"
   ].join("\n");
 }
-async function summarizeTranscript(messages, summarize, maxChars) {
+async function summarizeTranscript(messages, deps) {
+  const { summarize, countTokens, budgetTokens } = deps;
   const plain = plainTranscript(messages);
-  if (buildSummaryInstruction(plain).length <= maxChars) {
+  if (await countTokens(buildSummaryInstruction(plain)) <= budgetTokens) {
     return (await summarize(buildSummaryInstruction(plain))).trim();
   }
+  const charsPerToken = plain.length / Math.max(1, await countTokens(plain));
+  const chunkWrapperTokens = await countTokens(
+    buildChunkSummaryInstruction("", 1, 9)
+  );
+  const chunkBudget = Math.max(1, budgetTokens - chunkWrapperTokens);
+  const maxChars = Math.max(1, Math.floor(chunkBudget * charsPerToken));
   const chunks = chunkTranscript(messages, maxChars);
   const partials = [];
   for (const [i, chunk] of chunks.entries()) {
@@ -153,7 +160,13 @@ async function summarizeTranscript(messages, summarize, maxChars) {
   }
   if (partials.length <= 1) return partials[0] ?? "";
   let combined = partials.join("\n\n");
-  if (combined.length > maxChars) combined = combined.slice(0, maxChars);
+  const reduceWrapperTokens = await countTokens(buildReduceInstruction(""));
+  const reduceBudget = Math.max(1, budgetTokens - reduceWrapperTokens);
+  const combinedTokens = await countTokens(combined);
+  if (combinedTokens > reduceBudget) {
+    const ratio = combined.length / Math.max(1, combinedTokens);
+    combined = combined.slice(0, Math.max(1, Math.floor(reduceBudget * ratio)));
+  }
   return (await summarize(buildReduceInstruction(combined))).trim();
 }
 function stripReasoning(text) {
@@ -315,13 +328,18 @@ async function preprocess(ctl, userMessage) {
     if (chat.get("summarize")) {
       try {
         const source = await ctl.tokenSource();
-        const maxChars = await summaryInputBudgetChars(source);
-        const runOnce = async (instruction) => {
+        const budgetTokens = await summaryInputBudgetTokens(source);
+        const summarize = async (instruction) => {
           const result = await source.respond(instruction);
           const raw = result.nonReasoningContent.trim() ? result.nonReasoningContent : result.content;
           return stripReasoning(raw);
         };
-        summary = await summarizeTranscript(messages, runOnce, maxChars) || null;
+        const countTokens = "countTokens" in source ? (text2) => source.countTokens(text2) : async (text2) => Math.ceil(text2.length / 4);
+        summary = await summarizeTranscript(messages, {
+          summarize,
+          countTokens,
+          budgetTokens
+        }) || null;
       } catch (err) {
         summaryError = errText(err);
         ctl.debug(`[compact] summary failed: ${errText(err)}`);
@@ -364,19 +382,26 @@ ${summary}
 function errText(err) {
   return err instanceof Error ? err.message : String(err);
 }
-async function summaryInputBudgetChars(source) {
-  const FALLBACK_CHARS = 12e3;
+async function summaryInputBudgetTokens(source) {
+  let contextTokens = 0;
   try {
-    if ("getContextLength" in source) {
-      const contextTokens = await source.getContextLength();
-      if (contextTokens > 0) {
-        const inputTokens = Math.max(1024, Math.floor(contextTokens * 0.7));
-        return inputTokens * 3;
+    if ("getModelInfo" in source) {
+      const info = await source.getModelInfo();
+      if (info && typeof info.contextLength === "number") {
+        contextTokens = info.contextLength;
       }
     }
   } catch {
   }
-  return FALLBACK_CHARS;
+  if (contextTokens <= 0 && "getContextLength" in source) {
+    try {
+      const c = await source.getContextLength();
+      if (c > 0) contextTokens = c;
+    } catch {
+    }
+  }
+  if (contextTokens <= 0) return 4e3;
+  return Math.max(512, Math.floor(contextTokens * 0.7));
 }
 async function main(context) {
   context.withConfigSchematics(chatConfigSchematics).withGlobalConfigSchematics(globalConfigSchematics).withPromptPreprocessor(preprocess);

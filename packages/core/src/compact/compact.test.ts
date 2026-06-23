@@ -259,42 +259,44 @@ describe("buildChunkSummaryInstruction / buildReduceInstruction", () => {
 });
 
 describe("summarizeTranscript", () => {
+  // Deterministic stand-in for the model tokenizer: ~4 chars per token.
+  const countTokens = async (t: string) => Math.ceil(t.length / 4);
   const small: TranscriptMessage[] = [
     { role: "user", text: "hi" },
     { role: "assistant", text: "yo" },
   ];
 
-  it("summarizes in a single call when the transcript fits", async () => {
+  it("summarizes in a single call when the transcript fits the budget", async () => {
     const calls: string[] = [];
-    const out = await summarizeTranscript(
-      small,
-      async (instr) => {
+    const out = await summarizeTranscript(small, {
+      summarize: async (instr) => {
         calls.push(instr);
         return "SINGLE";
       },
-      100_000,
-    );
+      countTokens,
+      budgetTokens: 100_000,
+    });
     expect(out).toBe("SINGLE");
     expect(calls).toHaveLength(1);
     expect(calls[0]).toContain("<<<TRANSCRIPT");
     expect(calls[0]).not.toContain("part 1 of");
   });
 
-  it("map-reduces when the transcript overflows the budget", async () => {
+  it("map-reduces when the transcript overflows the token budget", async () => {
     const big: TranscriptMessage[] = Array.from({ length: 6 }, (_, i) => ({
       role: i % 2 === 0 ? "user" : "assistant",
       text: "z".repeat(40),
     }));
     const calls: string[] = [];
-    const out = await summarizeTranscript(
-      big,
-      async (instr) => {
+    const out = await summarizeTranscript(big, {
+      summarize: async (instr) => {
         calls.push(instr);
         if (instr.includes("<<<NOTES")) return "MERGED";
         return "note";
       },
-      60,
-    );
+      countTokens,
+      budgetTokens: 120, // below the full transcript, above the wrapper overhead
+    });
     expect(out).toBe("MERGED");
     const chunkCalls = calls.filter((c) => c.includes("part "));
     const reduceCalls = calls.filter((c) => c.includes("<<<NOTES"));
@@ -304,12 +306,36 @@ describe("summarizeTranscript", () => {
     expect(reduceCalls[0]).toContain("note");
   });
 
+  it("never lets a single call exceed the budget (no overflow)", async () => {
+    const big: TranscriptMessage[] = Array.from({ length: 8 }, (_, i) => ({
+      role: i % 2 === 0 ? "user" : "assistant",
+      text: "word ".repeat(60),
+    }));
+    const budgetTokens = 200;
+    const sizes: number[] = [];
+    await summarizeTranscript(big, {
+      summarize: async (instr) => {
+        sizes.push(await countTokens(instr));
+        return "note";
+      },
+      countTokens,
+      budgetTokens,
+    });
+    // every model call (chunks + reduce) stays within budget.
+    expect(sizes.length).toBeGreaterThan(1);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(budgetTokens);
+  });
+
   it("drops empty part-notes and returns '' when everything is empty", async () => {
     const big: TranscriptMessage[] = Array.from({ length: 4 }, () => ({
       role: "user" as const,
       text: "z".repeat(40),
     }));
-    const out = await summarizeTranscript(big, async () => "   ", 60);
+    const out = await summarizeTranscript(big, {
+      summarize: async () => "   ",
+      countTokens,
+      budgetTokens: 120,
+    });
     expect(out).toBe("");
   });
 });

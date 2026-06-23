@@ -110,11 +110,11 @@ export async function preprocess(
     if (chat.get("summarize")) {
       try {
         const source = await ctl.tokenSource();
-        const maxChars = await summaryInputBudgetChars(source);
+        const budgetTokens = await summaryInputBudgetTokens(source);
         // One model call on an instruction → cleaned text. Prefer the SDK's
         // separated non-reasoning content; strip <think> either way so a
         // reasoning-only answer never lands raw in the seed.
-        const runOnce = async (instruction: string): Promise<string> => {
+        const summarize = async (instruction: string): Promise<string> => {
           const result = await source.respond(instruction);
           const raw = result.nonReasoningContent.trim()
             ? result.nonReasoningContent
@@ -123,8 +123,17 @@ export async function preprocess(
         };
         // Map-reduce when the transcript would overflow the context, so a long
         // conversation (exactly when compaction matters) still summarizes.
+        // Token counts use the model's tokenizer when available, else an estimate.
+        const countTokens =
+          "countTokens" in source
+            ? (text: string) => source.countTokens(text)
+            : async (text: string) => Math.ceil(text.length / 4);
         summary =
-          (await summarizeTranscript(messages, runOnce, maxChars)) || null;
+          (await summarizeTranscript(messages, {
+            summarize,
+            countTokens,
+            budgetTokens,
+          })) || null;
       } catch (err) {
         summaryError = errText(err);
         ctl.debug(`[compact] summary failed: ${errText(err)}`);
@@ -169,32 +178,40 @@ function errText(err: unknown): string {
 }
 
 /**
- * A conservative character budget for one summary model-call, derived from the
- * model's real context window so a long transcript gets chunked instead of
- * overflowing it (the failure mode when the whole conversation is sent at once).
- * Reserve ~30% of context for the instruction + the model's own output, and
- * size the input at ~3 chars/token (a typical ratio). On token-dense content
- * (code, CJK) a packed chunk can use more of the window, but seed summaries are
- * short, so the 30% reservation absorbs the slack without overflowing.
- * Falls back to a safe constant when the token source is a generator handle that
- * doesn't expose its context length.
+ * Max input tokens for one summary call, with output headroom reserved.
+ *
+ * MUST be derived from the model's **loaded** context window. `getModelInfo()`
+ * on a loaded handle reports the instance's `contextLength` (the loaded window);
+ * `getContextLength()` can instead report the model's *maximum* (e.g. ~100k for
+ * Llama 4), which — if used as the budget — lets a single summary call overflow
+ * the much smaller loaded window. So prefer `getModelInfo()`, fall back to
+ * `getContextLength()`, then a safe constant. Reserve ~30% for the instruction
+ * overhead + the model's own summary output.
  */
-async function summaryInputBudgetChars(
+async function summaryInputBudgetTokens(
   source: Awaited<ReturnType<PromptPreprocessorController["tokenSource"]>>,
 ): Promise<number> {
-  const FALLBACK_CHARS = 12_000; // ~3–4k tokens: safe even for 8k-context models
+  let contextTokens = 0;
   try {
-    if ("getContextLength" in source) {
-      const contextTokens = await source.getContextLength();
-      if (contextTokens > 0) {
-        const inputTokens = Math.max(1024, Math.floor(contextTokens * 0.7));
-        return inputTokens * 3;
+    if ("getModelInfo" in source) {
+      const info = await source.getModelInfo();
+      if (info && typeof info.contextLength === "number") {
+        contextTokens = info.contextLength;
       }
     }
   } catch {
-    /* fall through to the constant */
+    /* fall through */
   }
-  return FALLBACK_CHARS;
+  if (contextTokens <= 0 && "getContextLength" in source) {
+    try {
+      const c = await source.getContextLength();
+      if (c > 0) contextTokens = c;
+    } catch {
+      /* fall through */
+    }
+  }
+  if (contextTokens <= 0) return 4000; // safe default when nothing is reported
+  return Math.max(512, Math.floor(contextTokens * 0.7));
 }
 
 export async function main(context: PluginContext) {
