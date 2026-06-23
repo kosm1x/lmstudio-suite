@@ -362,17 +362,25 @@ async function preprocess(ctl, userMessage) {
         const summarize = async (instruction) => {
           const result = await source.respond(instruction);
           const raw = result.nonReasoningContent.trim() ? result.nonReasoningContent : result.content;
-          return stripReasoning(raw);
+          const cleaned = stripReasoning(raw) || raw.replace(/<\/?think\b[^>]*>/gi, "").trim();
+          console.log(
+            `[compact] summary call raw=${raw.length} cleaned=${cleaned.length}`
+          );
+          return cleaned;
         };
         const countTokens = "countTokens" in source ? (text2) => source.countTokens(text2) : async (text2) => Math.ceil(text2.length / 4);
+        console.log(
+          `[compact] summarizing ${messages.length} msgs, budget=${budgetTokens} tokens`
+        );
         summary = await summarizeTranscript(messages, {
           summarize,
           countTokens,
           budgetTokens
         }) || null;
+        console.log(`[compact] summary length=${summary?.length ?? 0}`);
       } catch (err) {
         summaryError = errText(err);
-        ctl.debug(`[compact] summary failed: ${errText(err)}`);
+        console.log(`[compact] summary failed: ${errText(err)}`);
       }
       if (summary) {
         const seedPath = join(dir, seed);
@@ -380,6 +388,7 @@ async function preprocess(ctl, userMessage) {
 
 ${summary}
 `, "utf8");
+        console.log(`[compact] wrote seed ${seedPath}`);
         lines.push(
           `- Seed: ${seedPath}`,
           "",

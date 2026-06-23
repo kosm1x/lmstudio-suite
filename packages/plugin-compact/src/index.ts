@@ -159,7 +159,16 @@ export async function preprocess(
           const raw = result.nonReasoningContent.trim()
             ? result.nonReasoningContent
             : result.content;
-          return stripReasoning(raw);
+          // Salvage reasoning-only output: some models (e.g. abliterated builds)
+          // emit only a <think> block. Stripping it would leave nothing, so fall
+          // back to the de-tagged reasoning text rather than dropping the seed.
+          const cleaned =
+            stripReasoning(raw) ||
+            raw.replace(/<\/?think\b[^>]*>/gi, "").trim();
+          console.log(
+            `[compact] summary call raw=${raw.length} cleaned=${cleaned.length}`,
+          );
+          return cleaned;
         };
         // Map-reduce when the transcript would overflow the context, so a long
         // conversation (exactly when compaction matters) still summarizes.
@@ -168,19 +177,24 @@ export async function preprocess(
           "countTokens" in source
             ? (text: string) => source.countTokens(text)
             : async (text: string) => Math.ceil(text.length / 4);
+        console.log(
+          `[compact] summarizing ${messages.length} msgs, budget=${budgetTokens} tokens`,
+        );
         summary =
           (await summarizeTranscript(messages, {
             summarize,
             countTokens,
             budgetTokens,
           })) || null;
+        console.log(`[compact] summary length=${summary?.length ?? 0}`);
       } catch (err) {
         summaryError = errText(err);
-        ctl.debug(`[compact] summary failed: ${errText(err)}`);
+        console.log(`[compact] summary failed: ${errText(err)}`);
       }
       if (summary) {
         const seedPath = join(dir, seed);
         await writeFile(seedPath, `# Resume seed\n\n${summary}\n`, "utf8");
+        console.log(`[compact] wrote seed ${seedPath}`);
         lines.push(
           `- Seed: ${seedPath}`,
           "",
