@@ -64,6 +64,28 @@ describe("parseCompactTrigger", () => {
   it("honours a custom trigger word", () => {
     expect(parseCompactTrigger("!dump", "!dump").matched).toBe(true);
   });
+
+  it("matches the trigger as a standalone line after prepended content", () => {
+    // Earlier chain preprocessors (time/memory/retrieval) prepend context above
+    // the user's line, so the trigger is no longer at the very start.
+    const prepended = "Current time: 2026-06-23\n\nRetrieved: foo\n\n/compact";
+    expect(parseCompactTrigger(prepended, "/compact").matched).toBe(true);
+  });
+
+  it("captures a note on a trigger line after prepended content", () => {
+    expect(
+      parseCompactTrigger("context\n/compact ship it", "/compact"),
+    ).toEqual({
+      matched: true,
+      note: "ship it",
+    });
+  });
+
+  it("still rejects a mid-line trigger even with multiple lines", () => {
+    expect(
+      parseCompactTrigger("intro\nplease /compact now", "/compact").matched,
+    ).toBe(false);
+  });
 });
 
 describe("serializeTranscript", () => {

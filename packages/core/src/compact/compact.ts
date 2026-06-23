@@ -39,16 +39,24 @@ export function parseCompactTrigger(
   text: string,
   trigger: string,
 ): TriggerMatch {
-  const body = text.trim();
   // Null-safe: the trigger may arrive undefined when LM Studio hasn't
   // materialized the global-config default. Never throw here — this runs
   // outside the plugin's try/catch, so a throw would fail the preprocessor open.
   const trig = (trigger ?? "").trim();
+  const body = (text ?? "").trim();
   if (!trig || !body) return { matched: false, note: "" };
-  if (body === trig) return { matched: true, note: "" };
-  // trigger must be followed by whitespace to count (avoids "/compacting").
-  if (body.startsWith(trig) && /\s/.test(body.charAt(trig.length))) {
-    return { matched: true, note: body.slice(trig.length).trim() };
+
+  // Scan the whole message AND each line. Earlier prompt-preprocessors in the
+  // chain (time, memory, retrieval) prepend content, so the user's trigger line
+  // is often no longer at the very start of the message — but it survives as its
+  // own line. A line must START with the trigger (alone, or trigger + a note),
+  // so a mid-sentence "please /compact" and "/compacting" still don't match.
+  for (const candidate of [body, ...body.split(/\r?\n/)]) {
+    const line = candidate.trim();
+    if (line === trig) return { matched: true, note: "" };
+    if (line.startsWith(trig) && /\s/.test(line.charAt(trig.length))) {
+      return { matched: true, note: line.slice(trig.length).trim() };
+    }
   }
   return { matched: false, note: "" };
 }
